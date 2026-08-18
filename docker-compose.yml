@@ -1,0 +1,44 @@
+services:
+  plex-art-manager:
+    build: .
+    # Once you're publishing built images, swap the line above for:
+    # image: ghcr.io/<your-github-username>/plex-art-manager:latest
+    container_name: plex-art-manager
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    environment:
+      # Files created by the app (the database, and anything saved to your
+      # movie library) will be owned by this uid/gid. Match it to whatever
+      # already owns your media library on disk.
+      PUID: 1000
+      PGID: 1000
+      TZ: Etc/UTC
+    volumes:
+      # Persist the SQLite database and thumbnail cache across rebuilds.
+      - ./data:/var/www/html/data
+      - ./cache:/var/www/html/cache
+      # Point this at your actual movie library. The in-container path
+      # (/movies here) can be anything - just set it to match in the app's
+      # Settings page (Mapped Folders / Base Path) after first launch.
+      - /path/to/your/movies:/movies
+
+    # --- Advanced: mounting a remote share instead of a local path ---
+    # If your media library lives on a different machine than wherever you
+    # run this container (e.g. Plex runs on a NAS or another host), you can
+    # mount it via a named CIFS/SMB volume instead of a plain bind mount.
+    # Replace the /movies bind mount above with a named volume reference,
+    # and define it below:
+    #
+    # volumes:
+    #   - movies:/movies
+    #
+    # volumes:
+    #   movies:
+    #     driver_opts:
+    #       type: "cifs"
+    #       device: "//<remote-host>/<share-name>"
+    #       o: "username=<user>,password=<pass>,uid=1000,gid=1000,rw"
+    #
+    # This requires cifs-utils installed on the Docker host itself (not in
+    # any container) - `apt-get install cifs-utils` / distro equivalent.

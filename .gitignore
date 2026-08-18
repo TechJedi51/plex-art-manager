@@ -1,0 +1,14 @@
+# Contains the SQLite database with your Plex token and API keys in
+# plaintext - must never be committed.
+/data/
+/cache/
+
+# Docker Compose env overrides, if you use one
+.env
+
+# OS/editor cruft
+.DS_Store
+*.swp
+
+# This project's own build artifact if you zip it for distribution
+*.zip

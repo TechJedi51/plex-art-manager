@@ -1,0 +1,7 @@
+.git
+.gitignore
+data/
+cache/
+*.zip
+*.md
+!README.md
