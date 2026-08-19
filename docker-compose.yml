@@ -1,8 +1,6 @@
 services:
   plex-art-manager:
-    build: .
-    # Once you're publishing built images, swap the line above for:
-    # image: ghcr.io/<your-github-username>/plex-art-manager:latest
+    image: ghcr.io/techjedi51/plex-art-manager:latest
     container_name: plex-art-manager
     restart: unless-stopped
     ports:
