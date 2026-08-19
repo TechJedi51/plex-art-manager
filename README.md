@@ -37,6 +37,9 @@ Edit `docker-compose.yml`:
 - Set the `/path/to/your/movies` volume to your actual movie library's path
 - Adjust `PUID`/`PGID` to match whatever already owns your media files (`id -u`
   / `id -g` on the account that owns them, if unsure)
+- If you'd rather use a pre-built image than build locally, swap
+  `build: .` for `image: ghcr.io/<your-username>/plex-art-manager:latest`
+  (see [Pre-built images](#pre-built-images) below for details)
 
 ```bash
 docker compose up -d --build
@@ -62,6 +65,18 @@ this container, see the commented CIFS/SMB example at the bottom of
 `docker-compose.yml`. This requires `cifs-utils` (or your distro's
 equivalent) installed on the Docker **host** itself, since Docker's volume
 driver shells out to `mount.cifs`.
+
+## Pre-built images
+
+Tagged releases are also published as multi-arch (amd64/arm64) images to
+GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/<your-username>/plex-art-manager:latest
+```
+
+Use this in `docker-compose.yml` in place of `build: .` if you'd rather not
+build locally.
 
 ## Alternative: bare-metal nginx + php-fpm
 

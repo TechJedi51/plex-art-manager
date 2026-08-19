@@ -1,3 +1,11 @@
+# Maintainer-only release notes - not needed by anyone using the app, kept
+# local rather than published to the public repo.
+/RELEASING.md
+
+# Claude Code session context - project state/decisions for picking this
+# project back up, not meant for public consumption.
+/CLAUDE.md
+
 # Contains the SQLite database with your Plex token and API keys in
 # plaintext - must never be committed.
 /data/
