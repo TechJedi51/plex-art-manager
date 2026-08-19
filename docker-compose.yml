@@ -1,6 +1,9 @@
 services:
   plex-art-manager:
     image: ghcr.io/techjedi51/plex-art-manager:latest
+    # To build from source instead (e.g. to test local changes), comment
+    # out the image line above and uncomment this one:
+    # build: .
     container_name: plex-art-manager
     restart: unless-stopped
     ports:

@@ -37,12 +37,12 @@ Edit `docker-compose.yml`:
 - Set the `/path/to/your/movies` volume to your actual movie library's path
 - Adjust `PUID`/`PGID` to match whatever already owns your media files (`id -u`
   / `id -g` on the account that owns them, if unsure)
-- If you'd rather not use a pre-built image than build locally, swap
-  `build: .` for `image: ghcr.io/techjedi51/plex-art-manager:latest`
-  (see [Pre-built images](#pre-built-images) below for details)
+- By default this pulls the pre-built image from GHCR (see
+  [Pre-built images](#pre-built-images) below). If you'd rather build from
+  source instead, swap the `image:` line for `build: .`
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 Visit `http://localhost:8080` (or whatever port you mapped), then:
@@ -75,8 +75,9 @@ GitHub Container Registry:
 docker pull ghcr.io/techjedi51/plex-art-manager:latest
 ```
 
-Use this in `docker-compose.yml` in place of `build: .` if you'd rather not
-build locally.
+This is what `docker-compose.yml` uses by default. If you'd rather build
+from source instead (e.g. to test local changes), swap the `image:` line
+for `build: .`.
 
 ## Alternative: bare-metal nginx + php-fpm
 
