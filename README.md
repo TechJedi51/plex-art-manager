@@ -29,7 +29,7 @@ Pure PHP + SQLite. No Python, no Node build step, no external database server.
 ## Quick Start (Docker)
 
 ```bash
-git clone https://github.com/<your-username>/plex-art-manager.git
+git clone https://github.com/techjedi51/plex-art-manager.git
 cd plex-art-manager
 ```
 
@@ -37,8 +37,8 @@ Edit `docker-compose.yml`:
 - Set the `/path/to/your/movies` volume to your actual movie library's path
 - Adjust `PUID`/`PGID` to match whatever already owns your media files (`id -u`
   / `id -g` on the account that owns them, if unsure)
-- If you'd rather use a pre-built image than build locally, swap
-  `build: .` for `image: ghcr.io/<your-username>/plex-art-manager:latest`
+- If you'd rather not use a pre-built image than build locally, swap
+  `build: .` for `image: ghcr.io/techjedi51/plex-art-manager:latest`
   (see [Pre-built images](#pre-built-images) below for details)
 
 ```bash
@@ -72,7 +72,7 @@ Tagged releases are also published as multi-arch (amd64/arm64) images to
 GitHub Container Registry:
 
 ```bash
-docker pull ghcr.io/<your-username>/plex-art-manager:latest
+docker pull ghcr.io/techjedi51/plex-art-manager:latest
 ```
 
 Use this in `docker-compose.yml` in place of `build: .` if you'd rather not
