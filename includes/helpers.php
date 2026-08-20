@@ -19,8 +19,14 @@ function map_path(string $filePath): string
         return $filePath;
     }
     foreach ($map as $container => $host) {
-        if (str_starts_with($filePath, (string) $container)) {
-            return rtrim((string) $host, '/') . substr($filePath, strlen((string) $container));
+        $container = rtrim((string) $container, '/');
+        if ($container === '') {
+            continue;
+        }
+        $len = strlen($container);
+        if (str_starts_with($filePath, $container)
+            && (strlen($filePath) === $len || $filePath[$len] === '/')) {
+            return rtrim((string) $host, '/') . substr($filePath, $len);
         }
     }
     return $filePath;
@@ -33,19 +39,33 @@ function map_path(string $filePath): string
  * into "/1995-1999/10 Things I Hate About You (1999)".
  * Trailing slashes on either side don't matter. Falls back to the full path
  * if base_path isn't set, or doesn't actually match the start of the path.
+ * base_path may also be a JSON array of strings (for setups with more than
+ * one independent mount root that don't share a parent path) - each is
+ * tried in turn.
  */
 function display_path(?string $fullPath): ?string
 {
     if ($fullPath === null || $fullPath === '') {
         return $fullPath;
     }
-    $base = rtrim((string) get_setting('base_path', ''), '/');
-    if ($base === '') {
+    $raw = (string) get_setting('base_path', '');
+    if ($raw === '') {
         return $fullPath;
     }
-    if (str_starts_with($fullPath, $base)) {
-        $stripped = substr($fullPath, strlen($base));
-        return $stripped === '' ? '/' : $stripped;
+    $decoded = json_decode($raw, true);
+    $bases = (is_array($decoded) && $decoded !== []) ? $decoded : [$raw];
+
+    foreach ($bases as $base) {
+        $base = rtrim((string) $base, '/');
+        if ($base === '') {
+            continue;
+        }
+        $len = strlen($base);
+        if (str_starts_with($fullPath, $base)
+            && (strlen($fullPath) === $len || $fullPath[$len] === '/')) {
+            $stripped = substr($fullPath, $len);
+            return $stripped === '' ? '/' : $stripped;
+        }
     }
     return $fullPath;
 }
