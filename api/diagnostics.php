@@ -41,7 +41,7 @@ foreach (array_keys(ASSET_FILENAMES) as $type) {
 }
 
 if ($rawFile && $mappedFolder !== dirname($rawFile)) {
-    $notes[] = 'mapped_folders_json is rewriting this path (raw Plex path differs from the resolved folder above). Confirm that mapping is still correct.';
+    $notes[] = 'A Folder Mapping row (Settings page) is rewriting this path (raw Plex path differs from the resolved folder above). Confirm that mapping is still correct.';
 }
 
 // --- Filesystem side ---
@@ -92,13 +92,13 @@ if (function_exists('posix_geteuid') && function_exists('posix_getpwuid')) {
 if ($mappedFolder === null) {
     $notes[] = "Plex didn't report a file path for this item at all — it may be missing its Media/Part info.";
 } elseif (!$fs['folderExists']) {
-    $notes[] = "This app's PHP process cannot see \"{$mappedFolder}\" on disk, even though Plex reports the movie living there. "
+    $notes[] = "Plex Art Manager cannot see \"{$mappedFolder}\" on disk, even though Plex reports the movie living there. "
         . 'On macOS this is commonly a mount-visibility issue: network/user-mounted volumes under /Volumes are often only '
-        . 'visible to the logged-in GUI user session that mounted them, not to a background daemon like php-fpm running as '
+        . 'visible to the logged-in GUI user session that mounted them, not to a background daemon like this is running as '
         . "a different user (shown below as \"processUser\"). If the folder genuinely doesn't exist, this app will never be "
         . 'able to save artwork for this movie.';
 } elseif (!$fs['folderWritable']) {
-    $notes[] = "This app's process can see \"{$mappedFolder}\" but cannot write to it — check folder ownership/permissions for the processUser shown below.";
+    $notes[] = "Plex Art Manager can see \"{$mappedFolder}\" but cannot write to it — check folder ownership/permissions for the processUser shown below.";
 } else {
     $missing = array_filter($fs['assets'], fn($a) => !$a['exists']);
     if (empty($missing)) {

@@ -32,30 +32,39 @@ $sections = [
             changes. Every stat tile is a link - <strong>Movies Tracked</strong> jumps to the Movies list,
             the <strong>Needs Review</strong> tile and each per-type "Missing" tile jump to Needs Review,
             pre-filtered to that asset type where applicable.</p>
+            <p>If a Sync or Batch job is currently running in the background, a status card appears above the
+            stats with a live progress bar and a link to the screen that has the full detail and Stop button -
+            it disappears once nothing is running. <strong>Recent Changes</strong> is pulled straight from the
+            database, so it reflects every Batch run\'s results (including ones finished in the background)
+            and survives page reloads and even closing the browser entirely.</p>
             <p>If Plex isn\'t configured yet (Settings page), this page shows a prompt instead of stats.</p>',
     ],
     [
         'id' => 'batch',
         'title' => 'Batch Process',
         'body' => '
+            <p>Batch runs as a background job, not a page you have to keep open - once started, it keeps going
+            even if you close the tab or reload the page. Reopening this screen (or the Dashboard) while a job
+            is running reattaches to it automatically and shows live progress; only one Sync or Batch job can be
+            active at a time, so starting one while the other is running is blocked with a clear message until
+            it finishes.</p>
             <p><strong>Library</strong> - which Plex movie section to process.</p>
             <p><strong>Asset Types</strong> - Poster and Background read directly off each Plex item (fast).
             Square Art and Logo require one extra Plex API call per movie the first time they\'re needed, so
             enabling them makes a batch noticeably slower - consider running them as a separate, smaller batch.</p>
-            <p><strong>Movies to Process</strong> - total number of movies this run should process, starting
-            from Start. Requests to the server are automatically split into small fixed-size chunks behind the
-            scenes regardless of this number, so the progress bar and log update frequently even on a large
-            run - you don\'t need to tune this for responsiveness, just set it to how many movies you actually
-            want processed.</p>
-            <p><strong>Start / Stop</strong> - which slice of the library to work through. Leave Stop blank to
-            process exactly the number set above, starting at Start; set an explicit Stop to run a bigger range
-            in one sitting (e.g. Start 0, Stop 500 works through the first 500 movies).</p>
+            <p><strong>Movies to Process</strong> - choose <strong>Custom amount</strong> (a total count starting
+            from Start, or an explicit Start/Stop range) or <strong>All movies in this library</strong>, which
+            shows the current library size and processes every movie in it. The actual count is re-checked
+            against Plex the moment the job starts, so it\'s always accurate even if the library changed since
+            you loaded the page. Either way, work happens in small fixed-size chunks behind the scenes, so
+            progress updates stay frequent even on a large run.</p>
             <p><strong>Dry Run</strong> - checks what would happen without downloading or writing anything.
             Because it never downloads the candidate image, it can\'t always tell "would replace with something
             different" apart from "would replace with the exact same file" - both show as
             <em>Would Update/Match</em>. Turn Dry Run off to get a definitive answer.</p>
-            <p>After a run, the Summary shows totals plus a list of every Changed and Failed item, same as the
-            original script\'s console output.</p>',
+            <p>After a run, the Summary shows totals plus a list of the most recent Changed and Failed items
+            (capped to the latest 50 of each on a very large run) - see the <strong>Logs</strong> page for a
+            complete, filterable history instead.</p>',
     ],
     [
         'id' => 'movies',
@@ -70,9 +79,11 @@ $sections = [
             filters combine together.</p>
             <p>Each asset column is headed by a small icon (Poster/Background/Square Art/Logo - hover any of
             them for a label) and shows one status symbol per movie - see the legend below for what each one
-            means. Clicking a row opens that movie\'s detail page. <strong>Sync Library</strong> pulls
-            title/path/TMDB id from Plex for the whole library (fast, no image downloads) - useful before your
-            first Batch run, or any time titles/paths may have changed in Plex.</p>',
+            means. Clicking a row opens that movie\'s detail page.</p>
+            <p><strong>Sync Library</strong> pulls title/path/TMDB id from Plex for the whole library (fast, no
+            image downloads) - useful before your first Batch run, or any time titles/paths may have changed in
+            Plex. Like Batch, it runs as a background job that survives closing the tab, and only one Sync or
+            Batch job can be active at a time.</p>',
     ],
     [
         'id' => 'legend',
@@ -144,6 +155,19 @@ $sections = [
             not a bug in this app\'s logic.</p>',
     ],
     [
+        'id' => 'logs',
+        'title' => 'Logs',
+        'body' => '
+            <p>A searchable history of app activity - primarily Sync/Batch job starts, finishes, cancellations,
+            and failures, plus any real application errors. Filter by level (Debug / Info / Warn / Error) and
+            page through with Prev/Next; each entry shows which job it belongs to, if any.</p>
+            <p><strong>Debug Mode</strong> (Settings page, off by default) adds a lot more detail here - a line
+            for every chunk a Sync or Batch job processes, not just the start/finish summary. Leave it off for
+            normal use; turn it on temporarily if you need to see exactly what a job did step by step. Info,
+            Warn, and Error entries are always recorded regardless of this setting, so a job\'s outcome is never
+            lost even with Debug Mode off.</p>',
+    ],
+    [
         'id' => 'settings',
         'title' => 'Settings',
         'body' => '
@@ -154,12 +178,19 @@ $sections = [
             width (server-side resize with on-disk caching when the GD extension is available; otherwise the
             original file is served as-is and just visually constrained by the browser).</p>
             <p><strong>Default Batch Size</strong> - the value pre-filled into Batch Process\'s Movies to Process field.</p>
-            <p><strong>Mapped Folders</strong> - only needed if this app sees a different filesystem path than
-            Plex reports for the same movie (e.g. Plex running on a different Mac, media reached here via a
-            CIFS/SMB mount at a different mount point). JSON object of <code>{"path Plex reports": "path this
-            app actually sees"}</code>.</p>
-            <p><strong>Base Path</strong> - purely cosmetic. Trims a matching prefix off every displayed path in
-            the UI so you see e.g. <code>/1995-1999/Movie (1999)</code> instead of the full mounted path.</p>',
+            <p><strong>Folder Mapping</strong> - one row per independent mount root, with three fields:
+            <strong>Path in Plex</strong> (the folder path exactly as Plex reports it), <strong>Local Path</strong>
+            (what this app\'s own process actually sees on disk for that same folder - only different from Path
+            in Plex if, say, Plex runs on a different machine or the two reach the media through different mount
+            points), and <strong>Display Path</strong> (a friendly label shown in the UI in place of that
+            folder\'s real path - purely cosmetic). If there\'s no real path difference, set Path in Plex and
+            Local Path to the same value and use Display Path just for the friendlier label, e.g. Path in Plex
+            <code>/Volumes/Plex Media/Feature Films</code>, Local Path <code>/plex-movies1</code>, Display Path
+            <code>Feature Films</code> turns <code>/plex-movies1/1995-1999/Movie (1999)</code> into
+            <code>Feature Films/1995-1999/Movie (1999)</code> in the UI. Leave Display Path blank on a row to
+            just strip that folder\'s prefix instead of relabeling it. Use "+ Add Folder" for setups with more
+            than one independent mount root; remove a row entirely if you don\'t need it.</p>
+            <p><strong>Debug Mode</strong> - see the Logs page above.</p>',
     ],
 ];
 

@@ -24,7 +24,14 @@ COPY . /var/www/html
 COPY docker/nginx.conf /etc/nginx/sites-enabled/plex-art-manager.conf
 COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY docker/entrypoint.sh /entrypoint.sh
+# COPY preserves each source file's exact permission bits from the host/build
+# context, which isn't something to trust - files brought in from elsewhere
+# (e.g. exported assets) can land with owner-only (600) permissions that would
+# make them unreadable by nginx's non-root worker process once owned by root
+# in the image. Force everything readable (directories also traversable) so
+# a stray restrictive mode on the host never silently breaks a static asset.
 RUN chmod +x /entrypoint.sh \
+    && chmod -R a+rX /var/www/html \
     && rm -rf /var/www/html/docker \
     && mkdir -p /var/www/html/data /var/www/html/cache/thumbs
 

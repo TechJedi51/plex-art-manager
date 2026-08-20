@@ -232,7 +232,7 @@ window.addEventListener('unhandledrejection', (e) => showFatalError(e.reason && 
    ========================================================================== */
 
 async function viewDashboard(content, toolbar) {
-    toolbar.innerHTML = `<span class="toolbar-title">Dashboard</span>`;
+    toolbar.innerHTML = `<span class="toolbar-title"><span class="icon-mask icon-mask-dashboard"></span>Dashboard</span>`;
 
     const stats = await api('stats.php');
 
@@ -311,7 +311,7 @@ function renderDashboardJobStatus(box, job) {
    ========================================================================== */
 
 async function viewBatch(content, toolbar) {
-    toolbar.innerHTML = `<span class="toolbar-title">Batch Process</span>`;
+    toolbar.innerHTML = `<span class="toolbar-title"><span class="icon-mask icon-mask-batch"></span>Batch Process</span>`;
 
     let libraries = [];
     try {
@@ -550,7 +550,7 @@ async function viewMovies(content, toolbar) {
     };
 
     toolbar.innerHTML = `
-        <span class="toolbar-title">Movies</span>
+        <span class="toolbar-title"><span class="icon-mask icon-mask-movies"></span>Movies</span>
         <input type="search" id="m-search" placeholder="Search movies…" style="width:220px">
         <select id="m-sort">
             <option value="title">Sort: Title</option>
@@ -944,7 +944,7 @@ async function viewReview(content, toolbar, query) {
 
     function renderToolbar() {
         toolbar.innerHTML = `
-            <span class="toolbar-title" id="rv-title">Needs Review</span>
+            <span class="toolbar-title"><span class="icon-mask icon-mask-review"></span><span id="rv-title">Needs Review</span></span>
             <button class="btn" id="rv-tab-review" style="font-weight:700">Needs Review</button>
             <button class="btn" id="rv-tab-ignored">Ignored</button>
             <input type="search" id="rv-search" placeholder="Search movies…" style="width:220px" value="${esc(state.q)}">
@@ -1045,13 +1045,12 @@ async function viewReview(content, toolbar, query) {
    ========================================================================== */
 
 async function viewDiagnostics(content, toolbar) {
-    toolbar.innerHTML = `<span class="toolbar-title">Diagnostics</span>`;
+    toolbar.innerHTML = `<span class="toolbar-title"><span class="icon-mask icon-mask-diagnostics"></span>Diagnostics</span>`;
     content.innerHTML = `
         <div class="card section-block">
             <p style="margin-top:0; color:var(--text-muted)">
-                Look up one movie by Plex ID and see exactly what Plex reports, what this app's
-                PHP process can actually see on disk, and what user that process is running as.
-                Use this to debug things like "Would Create" showing for artwork that already exists.
+                Look up one movie by Plex ID and see exactly what Plex reports, what Plex Art Manager can actually see on disk, and what user that process is running as.
+                Use this to find things like "Would Create" showing for artwork that already exists.
             </p>
             <div style="display:flex; gap:8px;">
                 <input type="number" id="d-ratingkey" placeholder="Plex ID, e.g. 72749" style="width:220px">
@@ -1149,7 +1148,7 @@ async function viewLogs(content, toolbar) {
     const state = { level: '', offset: 0, limit: 50 };
 
     toolbar.innerHTML = `
-        <span class="toolbar-title">Logs</span>
+        <span class="toolbar-title"><span class="icon-mask icon-mask-logs"></span>Logs</span>
         <select id="l-level">
             <option value="">All levels</option>
             <option value="debug">Debug</option>
@@ -1226,7 +1225,7 @@ function logLevelBadge(level) {
 
 async function viewHelp(content, toolbar) {
     toolbar.innerHTML = `
-        <span class="toolbar-title">Help</span>
+        <span class="toolbar-title"><span class="icon-mask icon-mask-help"></span>Help</span>
         <input type="search" id="help-search" placeholder="Search help…" style="width:260px">
     `;
     content.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading…</div>';
@@ -1262,8 +1261,18 @@ async function viewHelp(content, toolbar) {
    ========================================================================== */
 
 async function viewSettings(content, toolbar) {
-    toolbar.innerHTML = `<span class="toolbar-title">Settings</span>`;
+    toolbar.innerHTML = `<span class="toolbar-title"><span class="icon-mask icon-mask-settings"></span>Settings</span>`;
     const s = await api('settings.php');
+
+    let fmRows;
+    try {
+        const parsed = JSON.parse(s.folder_mappings_json || '[]');
+        fmRows = (Array.isArray(parsed) && parsed.length)
+            ? parsed.map(r => ({ plexPath: r.plexPath || '', localPath: r.localPath || '', displayPath: r.displayPath || '' }))
+            : [{ plexPath: '', localPath: '', displayPath: '' }];
+    } catch (e) {
+        fmRows = [{ plexPath: '', localPath: '', displayPath: '' }];
+    }
 
     content.innerHTML = `
         <div class="card section-block">
@@ -1317,20 +1326,19 @@ async function viewSettings(content, toolbar) {
                     <input type="number" id="s-batchsize" value="${esc(s.batch_default_size)}" min="1" max="100" style="width:120px">
                 </div>
             </div>
-            <div class="setting-row">
-                <div class="label">Mapped Folders</div>
-                <div class="control-wrap">
-                    <textarea id="s-mapped" rows="4" placeholder='{"/plex/container/path": "/actual/host/path"}'>${esc(s.mapped_folders_json)}</textarea>
-                    <div class="help">Only needed if this app sees a different filesystem path than Plex reports (e.g. Plex running in Docker). Leave as {} otherwise.</div>
-                </div>
-            </div>
-            <div class="setting-row">
-                <div class="label">Base Path</div>
-                <div class="control-wrap">
-                    <input type="text" id="s-basepath" value="${esc(s.base_path)}" placeholder="/Volumes/Plex Media/Feature Films">
-                    <div class="help">Trimmed off the front of any path shown in the UI, purely cosmetic. E.g. with this set, "${esc(s.base_path || '/Volumes/Plex Media/Feature Films')}/1995-1999/10 Things I Hate About You (1999)" displays as "/1995-1999/10 Things I Hate About You (1999)". A trailing slash is optional.</div>
-                </div>
-            </div>
+        </div>
+
+        <div class="card section-block">
+            <h3 style="margin-top:0">Folder Mapping</h3>
+            <p style="color:var(--text-muted); font-size:13px; margin-top:0;">
+                Only needed if this app sees a different filesystem path than Plex reports (e.g. Plex running in
+                Docker, or reached through a different mount point) or you'd like a friendlier label than the real
+                path in the UI. <strong>Path in Plex</strong> and <strong>Local Path</strong> can be identical if
+                there's no actual path difference - <strong>Display Path</strong> alone still works to relabel that
+                folder. Add one row per independent mount root.
+            </p>
+            <div id="fm-rows"></div>
+            <button class="btn" id="fm-add" type="button">+ Add Folder</button>
         </div>
 
         <div class="card section-block">
@@ -1347,8 +1355,46 @@ async function viewSettings(content, toolbar) {
         <button class="btn btn-primary" id="s-save">Save Changes</button>
     `;
 
+    function renderFmRows() {
+        const box = document.getElementById('fm-rows');
+        box.innerHTML = fmRows.map((row, i) => `
+            <div class="setting-row">
+                <div class="label">Folder ${i + 1}</div>
+                <div class="control-wrap" style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end;">
+                    <div>
+                        <div class="help" style="margin:0 0 4px;">Path in Plex</div>
+                        <input type="text" class="fm-plex" data-idx="${i}" value="${esc(row.plexPath)}" placeholder="/Volumes/Plex Media/Feature Films" style="width:260px">
+                    </div>
+                    <div>
+                        <div class="help" style="margin:0 0 4px;">Local Path</div>
+                        <input type="text" class="fm-local" data-idx="${i}" value="${esc(row.localPath)}" placeholder="/plex-movies1" style="width:200px">
+                    </div>
+                    <div>
+                        <div class="help" style="margin:0 0 4px;">Display Path</div>
+                        <input type="text" class="fm-display" data-idx="${i}" value="${esc(row.displayPath)}" placeholder="Feature Films" style="width:200px">
+                    </div>
+                    <button class="btn btn-danger fm-remove" type="button" data-idx="${i}">Remove</button>
+                </div>
+            </div>`).join('');
+
+        box.querySelectorAll('.fm-plex').forEach(el => el.addEventListener('input', e => { fmRows[+e.target.dataset.idx].plexPath = e.target.value; }));
+        box.querySelectorAll('.fm-local').forEach(el => el.addEventListener('input', e => { fmRows[+e.target.dataset.idx].localPath = e.target.value; }));
+        box.querySelectorAll('.fm-display').forEach(el => el.addEventListener('input', e => { fmRows[+e.target.dataset.idx].displayPath = e.target.value; }));
+        box.querySelectorAll('.fm-remove').forEach(el => el.addEventListener('click', () => {
+            fmRows.splice(+el.dataset.idx, 1);
+            renderFmRows();
+        }));
+    }
+    renderFmRows();
+
+    document.getElementById('fm-add').addEventListener('click', () => {
+        fmRows.push({ plexPath: '', localPath: '', displayPath: '' });
+        renderFmRows();
+    });
+
     document.getElementById('s-save').addEventListener('click', async () => {
         try {
+            const folderMappings = fmRows.filter(r => r.plexPath.trim() || r.localPath.trim() || r.displayPath.trim());
             await api('settings.php', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -1358,8 +1404,7 @@ async function viewSettings(content, toolbar) {
                     tmdb_api_key: document.getElementById('s-tmdb').value,
                     thumb_max_width: document.getElementById('s-thumbwidth').value,
                     batch_default_size: document.getElementById('s-batchsize').value,
-                    mapped_folders_json: document.getElementById('s-mapped').value,
-                    base_path: document.getElementById('s-basepath').value.trim(),
+                    folder_mappings_json: JSON.stringify(folderMappings),
                     debug_mode: document.getElementById('s-debug-mode').checked ? '1' : '0',
                 }),
             });

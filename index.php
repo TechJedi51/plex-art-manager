@@ -40,15 +40,17 @@ try {
             Plex Art<span>Manager</span>
             <div class="brand-version">v<?= htmlspecialchars(APP_VERSION) ?></div>
         </div>
-        <nav>
-            <div class="nav-item" data-route="#/dashboard" onclick="location.hash='#/dashboard'"><span class="icon">&#9673;</span> Dashboard</div>
-            <div class="nav-item" data-route="#/batch" onclick="location.hash='#/batch'"><span class="icon">&#9658;</span> Batch Process</div>
-            <div class="nav-item" data-route="#/movies" onclick="location.hash='#/movies'"><span class="icon">&#127916;</span> Movies</div>
-            <div class="nav-item" data-route="#/review" onclick="location.hash='#/review'"><span class="icon">&#9888;</span> Needs Review</div>
-            <div class="nav-item" data-route="#/diagnostics" onclick="location.hash='#/diagnostics'"><span class="icon">&#128269;</span> Diagnostics</div>
-            <div class="nav-item" data-route="#/logs" onclick="location.hash='#/logs'"><span class="icon">&#128220;</span> Logs</div>
-            <div class="nav-item" data-route="#/settings" onclick="location.hash='#/settings'"><span class="icon">&#9881;</span> Settings</div>
-            <div class="nav-item" data-route="#/help" onclick="location.hash='#/help'"><span class="icon">&#10067;</span> Help</div>
+        <nav class="nav-top">
+            <div class="nav-item" data-route="#/dashboard" onclick="location.hash='#/dashboard'"><span class="icon-mask icon-mask-dashboard"></span> Dashboard</div>
+            <div class="nav-item" data-route="#/batch" onclick="location.hash='#/batch'"><span class="icon-mask icon-mask-batch"></span> Batch Process</div>
+            <div class="nav-item" data-route="#/movies" onclick="location.hash='#/movies'"><span class="icon-mask icon-mask-movies"></span> Movies</div>
+            <div class="nav-item" data-route="#/review" onclick="location.hash='#/review'"><span class="icon-mask icon-mask-review"></span> Needs Review</div>
+            <div class="nav-item" data-route="#/diagnostics" onclick="location.hash='#/diagnostics'"><span class="icon-mask icon-mask-diagnostics"></span> Diagnostics</div>
+        </nav>
+        <nav class="nav-bottom">
+            <div class="nav-item" data-route="#/logs" onclick="location.hash='#/logs'"><span class="icon-mask icon-mask-logs"></span> Logs</div>
+            <div class="nav-item" data-route="#/settings" onclick="location.hash='#/settings'"><span class="icon-mask icon-mask-settings"></span> Settings</div>
+            <div class="nav-item" data-route="#/help" onclick="location.hash='#/help'"><span class="icon-mask icon-mask-help"></span> Help</div>
         </nav>
     </div>
     <div id="main">

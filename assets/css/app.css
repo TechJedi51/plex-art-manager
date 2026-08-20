@@ -75,7 +75,11 @@ a:hover { text-decoration: underline; }
     letter-spacing: 0.3px;
 }
 
-#sidebar nav { padding: 10px 0; flex: 1; }
+/* nav-top takes all available space, which pushes nav-bottom (Logs/Settings/
+   Help) down to the bottom of the sidebar regardless of window height - pure
+   flexbox, no JS needed to keep it pinned there. */
+#sidebar nav.nav-top { padding: 10px 0; flex: 1; }
+#sidebar nav.nav-bottom { padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.08); }
 
 #sidebar .nav-item {
     display: flex;
@@ -86,7 +90,6 @@ a:hover { text-decoration: underline; }
     font-weight: 500;
     border-left: 3px solid transparent;
 }
-#sidebar .nav-item .icon { width: 18px; text-align: center; opacity: 0.85; }
 #sidebar .nav-item:hover { background: var(--sidebar-bg-active); color: #fff; }
 #sidebar .nav-item.active {
     background: var(--sidebar-bg-active);
@@ -107,6 +110,9 @@ a:hover { text-decoration: underline; }
     min-height: 48px;
 }
 #toolbar .toolbar-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     color: #fff;
     font-weight: 700;
     font-size: 15px;
@@ -116,6 +122,41 @@ a:hover { text-decoration: underline; }
 #toolbar .toolbar-spacer { flex: 1 1 auto; }
 /* Buttons/inputs keep their normal light styling - they read fine against
    the dark toolbar bg without any extra overrides. */
+
+/* ---------------------------------------------------------------------- */
+/* Nav/header SVG icons - the files in images/ use fill="currentColor", but  */
+/* that only applies when inlined; loaded via <img> it'd just render black. */
+/* Using them as a CSS mask instead lets a plain background-color (our blue) */
+/* paint the icon regardless of the source file's own fill, and lets the    */
+/* same class be reused identically in the sidebar (index.php, static HTML) */
+/* and the per-view toolbar title (app.js, rendered client-side).           */
+/* ---------------------------------------------------------------------- */
+.icon-mask {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    background-color: var(--accent-light);
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    mask-position: center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+}
+.icon-mask-dashboard     { -webkit-mask-image: url('../../images/dashboard.svg');     mask-image: url('../../images/dashboard.svg'); }
+.icon-mask-batch         { -webkit-mask-image: url('../../images/batch-process.svg'); mask-image: url('../../images/batch-process.svg'); }
+.icon-mask-movies        { -webkit-mask-image: url('../../images/movies.svg');        mask-image: url('../../images/movies.svg'); }
+.icon-mask-review        { -webkit-mask-image: url('../../images/needs-review.svg');  mask-image: url('../../images/needs-review.svg'); }
+.icon-mask-diagnostics   { -webkit-mask-image: url('../../images/diagnostics.svg');   mask-image: url('../../images/diagnostics.svg'); }
+.icon-mask-logs          { -webkit-mask-image: url('../../images/logs.svg');          mask-image: url('../../images/logs.svg'); }
+.icon-mask-settings      { -webkit-mask-image: url('../../images/settings.svg');      mask-image: url('../../images/settings.svg'); }
+.icon-mask-help          { -webkit-mask-image: url('../../images/help.svg');          mask-image: url('../../images/help.svg'); }
+
+#sidebar .nav-item .icon-mask { opacity: 0.85; }
+#sidebar .nav-item:hover .icon-mask,
+#sidebar .nav-item.active .icon-mask { opacity: 1; }
+#toolbar .toolbar-title .icon-mask { margin-right: 2px; }
 
 #content { padding: 24px; flex: 1; }
 

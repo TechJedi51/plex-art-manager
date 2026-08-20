@@ -24,7 +24,7 @@ if ($method === 'POST') {
         json_error('Invalid JSON body');
     }
 
-    $allowed = ['plex_url', 'plex_token', 'fanart_api_key', 'tmdb_api_key', 'thumb_max_width', 'batch_default_size', 'mapped_folders_json', 'base_path', 'debug_mode'];
+    $allowed = ['plex_url', 'plex_token', 'fanart_api_key', 'tmdb_api_key', 'thumb_max_width', 'batch_default_size', 'folder_mappings_json', 'debug_mode'];
     $toSave = [];
     foreach ($allowed as $key) {
         if (!array_key_exists($key, $body)) {
@@ -35,10 +35,15 @@ if ($method === 'POST') {
         if (in_array($key, SECRET_SETTINGS, true) && str_contains($val, '•')) {
             continue;
         }
-        if ($key === 'mapped_folders_json') {
-            json_decode($val); // validate
-            if (json_last_error() !== JSON_ERROR_NONE) {
-                json_error('mapped_folders_json must be valid JSON');
+        if ($key === 'folder_mappings_json') {
+            $rows = json_decode($val, true);
+            if (!is_array($rows)) {
+                json_error('folder_mappings_json must be a JSON array');
+            }
+            foreach ($rows as $row) {
+                if (!is_array($row) || !array_key_exists('plexPath', $row) || !array_key_exists('localPath', $row) || !array_key_exists('displayPath', $row)) {
+                    json_error('Each folder mapping row needs plexPath, localPath, and displayPath');
+                }
             }
         }
         if ($key === 'thumb_max_width' && (!ctype_digit($val) || (int) $val < 20 || (int) $val > 2000)) {

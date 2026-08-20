@@ -153,6 +153,59 @@ function migrate_db(PDO $pdo): void
     // exist yet, so upgrading the app (e.g. adding base_path) never touches an
     // existing install's saved values.
     seed_default_settings($pdo);
+    migrate_folder_mappings($pdo);
+}
+
+/**
+ * One-time migration: mapped_folders_json + base_path were combined into a
+ * single folder_mappings_json setting (see includes/helpers.php). Runs
+ * exactly once per install, guarded by the folder_mappings_migrated flag
+ * rather than by checking whether folder_mappings_json is empty - otherwise
+ * a user who deliberately clears all their folder mappings back to [] would
+ * have them silently reappear from the old settings on the next page load.
+ * The old mapped_folders_json/base_path rows are left in place afterward
+ * (unused, harmless) rather than deleted.
+ */
+function migrate_folder_mappings(PDO $pdo): void
+{
+    $stmt = $pdo->prepare('SELECT value FROM settings WHERE key = :k');
+    $stmt->execute(['k' => 'folder_mappings_migrated']);
+    if ($stmt->fetchColumn() !== false) {
+        return;
+    }
+
+    $get = function (string $key) use ($pdo): ?string {
+        $s = $pdo->prepare('SELECT value FROM settings WHERE key = :k');
+        $s->execute(['k' => $key]);
+        $v = $s->fetchColumn();
+        return $v === false ? null : $v;
+    };
+
+    $map = json_decode($get('mapped_folders_json') ?? '{}', true);
+    $map = is_array($map) ? $map : [];
+
+    $baseRaw = $get('base_path') ?? '';
+    $baseDecoded = json_decode($baseRaw, true);
+    $bases = (is_array($baseDecoded) && $baseDecoded !== []) ? array_values($baseDecoded) : ($baseRaw !== '' ? [$baseRaw] : []);
+
+    $rows = [];
+    foreach ($map as $plexPath => $localPath) {
+        $rows[] = ['plexPath' => (string) $plexPath, 'localPath' => (string) $localPath, 'displayPath' => ''];
+    }
+    // Leftover base_path entries beyond what mapped_folders_json already
+    // covered become strip-only rows keyed to themselves - best effort, since
+    // the old two settings were never necessarily paired 1:1.
+    foreach (array_slice($bases, count($map)) as $extra) {
+        $rows[] = ['plexPath' => $extra, 'localPath' => $extra, 'displayPath' => ''];
+    }
+
+    if ($rows) {
+        $upsert = $pdo->prepare("INSERT INTO settings (key, value) VALUES ('folder_mappings_json', :v) ON CONFLICT(key) DO UPDATE SET value = :v");
+        $upsert->execute(['v' => json_encode($rows)]);
+    }
+
+    $mark = $pdo->prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (:k, :v)');
+    $mark->execute(['k' => 'folder_mappings_migrated', 'v' => '1']);
 }
 
 function seed_default_settings(PDO $pdo): void
@@ -164,9 +217,10 @@ function seed_default_settings(PDO $pdo): void
         'tmdb_api_key'        => '',
         'thumb_max_width'     => '100',
         'batch_default_size'  => '25',
-        'mapped_folders_json' => '{}', // {"host/path": "container/path"} — same idea as the old script
-        'base_path'           => '',   // stripped from the front of displayed paths, e.g. "/Volumes/Plex Media/Feature Films"
-        'debug_mode'          => '0',  // '1' enables debug-level entries on the Log View screen
+        'mapped_folders_json'  => '{}', // superseded by folder_mappings_json (see migrate_folder_mappings()) - kept only so the one-time migration has something to read
+        'base_path'            => '',   // superseded by folder_mappings_json - same reason
+        'folder_mappings_json' => '[]', // [{plexPath, localPath, displayPath}, ...] - see includes/helpers.php
+        'debug_mode'           => '0',  // '1' enables debug-level entries on the Log View screen
     ];
     $stmt = $pdo->prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (:k, :v)');
     foreach ($defaults as $k => $v) {

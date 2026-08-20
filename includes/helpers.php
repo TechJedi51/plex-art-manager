@@ -7,64 +7,67 @@ function now_iso(): string
 }
 
 /**
- * Apply the {host: container} folder mapping from settings, same idea as the
- * old script's MAPPED_FOLDERS. Only relevant if Plex sees paths through a
- * Docker bind mount that differ from what this PHP process sees on disk.
+ * Both map_path() and display_path() read the same folder_mappings_json
+ * setting - a JSON array of {plexPath, localPath, displayPath} rows, set on
+ * the Settings page under "Folder Mapping". One row can serve one or both
+ * purposes: plexPath -> localPath rewrites a path the way Plex reports it
+ * into the path this app's own process actually sees on disk (only needed
+ * when they differ, e.g. Plex reached through a different Docker bind mount
+ * or network share mount point); localPath -> displayPath is purely cosmetic,
+ * swapping the on-disk prefix for a friendlier label in the UI. A setup with
+ * no path differences and no cosmetic renaming needs zero rows at all.
  */
+function get_folder_mappings(): array
+{
+    $rows = json_decode(get_setting('folder_mappings_json', '[]') ?? '[]', true);
+    return is_array($rows) ? $rows : [];
+}
+
 function map_path(string $filePath): string
 {
-    $json = get_setting('mapped_folders_json', '{}');
-    $map = json_decode($json ?? '{}', true);
-    if (!is_array($map) || empty($map)) {
-        return $filePath;
-    }
-    foreach ($map as $container => $host) {
-        $container = rtrim((string) $container, '/');
-        if ($container === '') {
+    foreach (get_folder_mappings() as $row) {
+        $plexPath = rtrim((string) ($row['plexPath'] ?? ''), '/');
+        if ($plexPath === '') {
             continue;
         }
-        $len = strlen($container);
-        if (str_starts_with($filePath, $container)
+        $len = strlen($plexPath);
+        if (str_starts_with($filePath, $plexPath)
             && (strlen($filePath) === $len || $filePath[$len] === '/')) {
-            return rtrim((string) $host, '/') . substr($filePath, $len);
+            $localPath = rtrim((string) ($row['localPath'] ?? ''), '/');
+            return $localPath . substr($filePath, $len);
         }
     }
     return $filePath;
 }
 
 /**
- * Strip the configured base_path prefix off a full folder path for display,
- * e.g. base_path "/Volumes/Plex Media/Feature Films" turns
- * "/Volumes/Plex Media/Feature Films/1995-1999/10 Things I Hate About You (1999)"
- * into "/1995-1999/10 Things I Hate About You (1999)".
+ * Swaps a matching localPath prefix for its displayPath label, e.g. localPath
+ * "/plex-movies1" with displayPath "Feature Films" turns
+ * "/plex-movies1/1995-1999/10 Things I Hate About You (1999)" into
+ * "Feature Films/1995-1999/10 Things I Hate About You (1999)". An empty
+ * displayPath just strips the prefix instead (the old base_path behavior).
  * Trailing slashes on either side don't matter. Falls back to the full path
- * if base_path isn't set, or doesn't actually match the start of the path.
- * base_path may also be a JSON array of strings (for setups with more than
- * one independent mount root that don't share a parent path) - each is
- * tried in turn.
+ * if no row's localPath matches the start of the path.
  */
 function display_path(?string $fullPath): ?string
 {
     if ($fullPath === null || $fullPath === '') {
         return $fullPath;
     }
-    $raw = (string) get_setting('base_path', '');
-    if ($raw === '') {
-        return $fullPath;
-    }
-    $decoded = json_decode($raw, true);
-    $bases = (is_array($decoded) && $decoded !== []) ? $decoded : [$raw];
-
-    foreach ($bases as $base) {
-        $base = rtrim((string) $base, '/');
+    foreach (get_folder_mappings() as $row) {
+        $base = rtrim((string) ($row['localPath'] ?? ''), '/');
         if ($base === '') {
             continue;
         }
         $len = strlen($base);
         if (str_starts_with($fullPath, $base)
             && (strlen($fullPath) === $len || $fullPath[$len] === '/')) {
-            $stripped = substr($fullPath, $len);
-            return $stripped === '' ? '/' : $stripped;
+            $display = rtrim((string) ($row['displayPath'] ?? ''), '/');
+            $suffix = substr($fullPath, $len);
+            if ($display === '') {
+                return $suffix === '' ? '/' : $suffix;
+            }
+            return $display . $suffix;
         }
     }
     return $fullPath;
