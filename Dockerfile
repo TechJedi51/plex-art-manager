@@ -1,15 +1,21 @@
 FROM php:8.3-fpm
 
 # nginx + supervisor so this is a single, self-contained container (no
-# separate services/network needed to run it). gd's image libs are needed at
-# build time only; pdo_sqlite/gd are the only PHP extensions this app needs
-# beyond what the base image already ships (curl, fileinfo).
+# separate services/network needed to run it). pdo_sqlite/gd are the only PHP
+# extensions this app needs beyond what the base image already ships (curl,
+# fileinfo). gd's -dev packages (headers/static libs) are build-time only and
+# safe to purge afterward, but gd itself links dynamically against their
+# runtime libraries (e.g. libpng16.so.16) - purging with --auto-remove was
+# sweeping those runtime .so files away too as "orphaned" dependencies of the
+# -dev packages, breaking gd (and thumbnail generation) at runtime. Dropping
+# --auto-remove here still removes the named -dev packages, just without
+# cascading into their still-needed runtime dependencies.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         nginx supervisor \
         libsqlite3-dev libpng-dev libjpeg62-turbo-dev libwebp-dev libfreetype6-dev \
     && docker-php-ext-configure gd --with-jpeg --with-webp --with-freetype \
     && docker-php-ext-install -j"$(nproc)" pdo_sqlite gd \
-    && apt-get purge -y --auto-remove libsqlite3-dev libpng-dev libjpeg62-turbo-dev libwebp-dev libfreetype6-dev \
+    && apt-get purge -y libsqlite3-dev libpng-dev libjpeg62-turbo-dev libwebp-dev libfreetype6-dev \
     && rm -rf /var/lib/apt/lists/* /etc/nginx/sites-enabled/default
 
 WORKDIR /var/www/html
