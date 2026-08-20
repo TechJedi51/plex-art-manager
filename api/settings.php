@@ -24,7 +24,7 @@ if ($method === 'POST') {
         json_error('Invalid JSON body');
     }
 
-    $allowed = ['plex_url', 'plex_token', 'fanart_api_key', 'tmdb_api_key', 'thumb_max_width', 'batch_default_size', 'mapped_folders_json', 'base_path'];
+    $allowed = ['plex_url', 'plex_token', 'fanart_api_key', 'tmdb_api_key', 'thumb_max_width', 'batch_default_size', 'mapped_folders_json', 'base_path', 'debug_mode'];
     $toSave = [];
     foreach ($allowed as $key) {
         if (!array_key_exists($key, $body)) {
@@ -43,6 +43,9 @@ if ($method === 'POST') {
         }
         if ($key === 'thumb_max_width' && (!ctype_digit($val) || (int) $val < 20 || (int) $val > 2000)) {
             json_error('thumb_max_width must be a number between 20 and 2000');
+        }
+        if ($key === 'debug_mode' && !in_array($val, ['0', '1'], true)) {
+            json_error('debug_mode must be 0 or 1');
         }
         $toSave[$key] = $val;
     }

@@ -18,6 +18,11 @@ function get_db(): PDO
     $pdo->setAttribute(PDO::ATTR_DEFAULT_FETCH_MODE, PDO::FETCH_ASSOC);
     $pdo->exec('PRAGMA journal_mode = WAL');
     $pdo->exec('PRAGMA foreign_keys = ON');
+    // The job worker (cli/job_worker.php) writes progress every chunk while
+    // web requests may also write (cancel, settings, starting a new job) -
+    // without a busy timeout, SQLite's default is to fail a write immediately
+    // ("database is locked") instead of waiting out a brief writer conflict.
+    $pdo->exec('PRAGMA busy_timeout = 5000');
 
     migrate_db($pdo);
 
@@ -94,6 +99,56 @@ function migrate_db(PDO $pdo): void
         )
     ");
 
+    // A "job" is one Sync Library or Batch Process run, processed chunk-by-chunk
+    // by cli/job_worker.php (a persistent background process, not tied to any
+    // HTTP request) so it survives the browser tab closing/reloading. Only one
+    // row may be queued/running at a time — enforced in includes/jobs.php's
+    // create_job(), not here. cursor/counts_json/recent_items_json are updated
+    // after every chunk so a killed worker can resume from the last persisted
+    // point (see cli/job_worker.php's startup recovery).
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS jobs (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            type              TEXT NOT NULL,                 -- sync | batch
+            status            TEXT NOT NULL DEFAULT 'queued', -- queued | running | done | failed | cancelled
+            section_id        INTEGER NOT NULL,
+            section_title     TEXT,
+            asset_types_json  TEXT,                            -- batch only; JSON array, NULL for sync
+            dry_run           INTEGER NOT NULL DEFAULT 0,
+            start_pos         INTEGER NOT NULL DEFAULT 0,
+            stop_pos          INTEGER,                          -- NULL = run to end of library
+            cursor            INTEGER NOT NULL DEFAULT 0,
+            total_size        INTEGER,
+            chunk_size        INTEGER NOT NULL DEFAULT 15,
+            counts_json       TEXT NOT NULL DEFAULT '{}',
+            recent_items_json TEXT NOT NULL DEFAULT '[]',
+            cancel_requested  INTEGER NOT NULL DEFAULT 0,
+            error             TEXT,
+            created_at        TEXT NOT NULL,
+            started_at        TEXT,
+            finished_at       TEXT,
+            updated_at        TEXT NOT NULL
+        )
+    ");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)");
+
+    // Narrative log lines for the Log View screen - distinct from jobs' own
+    // structured progress columns above. debug-level lines are only written
+    // when the debug_mode setting is on (see includes/logs.php); info/warn/error
+    // are always written so a job's outcome is never silently lost.
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS logs (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id     INTEGER,
+            level      TEXT NOT NULL, -- debug | info | warn | error
+            message    TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE SET NULL
+        )
+    ");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_logs_created ON logs(created_at)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level)");
+
     // INSERT OR IGNORE is safe to run every time — it only fills in keys that don't
     // exist yet, so upgrading the app (e.g. adding base_path) never touches an
     // existing install's saved values.
@@ -111,6 +166,7 @@ function seed_default_settings(PDO $pdo): void
         'batch_default_size'  => '25',
         'mapped_folders_json' => '{}', // {"host/path": "container/path"} — same idea as the old script
         'base_path'           => '',   // stripped from the front of displayed paths, e.g. "/Volumes/Plex Media/Feature Films"
+        'debug_mode'          => '0',  // '1' enables debug-level entries on the Log View screen
     ];
     $stmt = $pdo->prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (:k, :v)');
     foreach ($defaults as $k => $v) {

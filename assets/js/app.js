@@ -117,9 +117,61 @@ const routes = {
     '#/movies': viewMovies,
     '#/review': viewReview,
     '#/diagnostics': viewDiagnostics,
+    '#/logs': viewLogs,
     '#/settings': viewSettings,
     '#/help': viewHelp,
 };
+
+// Batch/Movies/Dashboard all poll job status while a background job is
+// active (see startJobPolling() below) - one place to stop that poller
+// whenever the route changes, instead of every view remembering to clean up
+// its own interval.
+let activePoll = null;
+function stopPolling() {
+    if (activePoll) {
+        clearInterval(activePoll);
+        activePoll = null;
+    }
+}
+
+/**
+ * Polls api/jobs_status.php?id=<jobId> every ~1.5s and calls onUpdate(job)
+ * with each result, stopping itself once the job reaches a terminal status.
+ * Shared by the Dashboard, Batch Process, and Movies (Sync Library) screens
+ * so all three reattach to an in-progress job the same way.
+ */
+function startJobPolling(jobId, onUpdate) {
+    stopPolling();
+    const poll = async () => {
+        let job;
+        try {
+            job = (await api('jobs_status.php?id=' + jobId)).job;
+        } catch (e) {
+            stopPolling();
+            toast('Lost track of job status: ' + e.message, 'error');
+            return;
+        }
+        onUpdate(job);
+        if (!job || ['done', 'failed', 'cancelled'].includes(job.status)) {
+            stopPolling();
+        }
+    };
+    poll();
+    activePoll = setInterval(poll, 1500);
+}
+
+function jobStatusBadge(status) {
+    const cls = { queued: 'badge-queued', running: 'badge-running', cancelled: 'badge-cancelled', failed: 'badge-failed', done: 'badge-new' }[status] || 'badge-none';
+    return `<span class="badge ${cls}">${esc(status)}</span>`;
+}
+
+function jobProgressLabel(job) {
+    if (job.status === 'queued') return 'Queued — waiting for the job worker…';
+    if (job.status === 'failed') return `Failed: ${job.error || 'unknown error'}`;
+    if (job.status === 'cancelled') return `Stopped at ${job.cursor}${job.totalSize != null ? ' of ' + job.totalSize : ''}.`;
+    if (job.status === 'done') return `Complete — ${job.cursor}${job.totalSize != null ? ' of ' + job.totalSize : ''} processed.`;
+    return job.totalSize != null ? `${job.cursor} of ${job.totalSize} (${job.pct}%)` : `${job.cursor} processed…`;
+}
 
 function currentRoute() {
     const hash = location.hash || '#/dashboard';
@@ -131,6 +183,7 @@ function currentRoute() {
 }
 
 async function router() {
+    stopPolling();
     const route = currentRoute();
     highlightNav(route.view === 'movieDetail' ? '#/movies' : route.view);
     const content = document.getElementById('content');
@@ -191,6 +244,8 @@ async function viewDashboard(content, toolbar) {
         return;
     }
 
+    const activeJob = (await api('jobs_status.php')).job;
+
     const pendingRows = ASSET_TYPES.map(t => `
         <a class="stat-tile" href="#/review?types=${t}">
             <div class="num">${stats.pendingByType[t] || 0}</div>
@@ -207,6 +262,7 @@ async function viewDashboard(content, toolbar) {
         : '<div class="empty-state">No changes yet — run a batch to get started.</div>';
 
     content.innerHTML = `
+        <div id="dash-job-status"></div>
         <div class="section-block">
             <div class="stat-grid">
                 <a class="stat-tile" href="#/movies"><div class="num">${stats.totalMovies}</div><div class="label">Movies Tracked</div></a>
@@ -224,20 +280,35 @@ async function viewDashboard(content, toolbar) {
             <a class="btn" href="#/review">Needs Review (${stats.totalPending})</a>
         </div>
     `;
+
+    // Read-only: shows a job's live progress if one happens to be running,
+    // with a link through to the screen that has Start/Stop controls -
+    // Dashboard itself doesn't start or cancel jobs.
+    if (activeJob) {
+        renderDashboardJobStatus(document.getElementById('dash-job-status'), activeJob);
+        startJobPolling(activeJob.id, job => renderDashboardJobStatus(document.getElementById('dash-job-status'), job));
+    }
+}
+
+function renderDashboardJobStatus(box, job) {
+    if (!box) return;
+    const label = job.type === 'batch' ? 'Batch Process' : 'Sync Library';
+    const linkHref = job.type === 'batch' ? '#/batch' : '#/movies';
+    box.innerHTML = `
+        <div class="card section-block">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                <div>${label} running — <strong>${esc(job.sectionTitle || '')}</strong> ${jobStatusBadge(job.status)}</div>
+                <a class="btn btn-primary" href="${linkHref}">View Progress →</a>
+            </div>
+            <div class="progress-outer"><div class="progress-inner" style="width:${job.pct}%"></div></div>
+            <div style="font-size:12px;color:var(--text-muted)">${jobProgressLabel(job)}</div>
+        </div>
+    `;
 }
 
 /* ==========================================================================
    Batch Process
    ========================================================================== */
-
-let batchAbort = false;
-
-// Fixed, small chunk size for actual server requests - deliberately NOT tied to
-// what the user sets as "Movies to Process". Keeping this small and constant
-// is what makes the progress bar/log update frequently regardless of how
-// large a run is requested; it's an internal responsiveness detail, not
-// something the user needs to tune.
-const BATCH_CHUNK_SIZE = 15;
 
 async function viewBatch(content, toolbar) {
     toolbar.innerHTML = `<span class="toolbar-title">Batch Process</span>`;
@@ -255,9 +326,11 @@ async function viewBatch(content, toolbar) {
     }
 
     const defaultSize = (await api('settings.php')).batch_default_size || '25';
+    const activeJob = (await api('jobs_status.php')).job;
 
     content.innerHTML = `
-        <div class="card section-block">
+        <div class="banner banner-warn" id="b-blocked-banner" style="display:none"></div>
+        <div class="card section-block" id="b-form-card">
             <div class="setting-row">
                 <div class="label">Library</div>
                 <div class="control-wrap">
@@ -277,11 +350,15 @@ async function viewBatch(content, toolbar) {
             <div class="setting-row">
                 <div class="label">Movies to Process</div>
                 <div class="control-wrap">
-                    <input type="number" id="b-limit" value="${esc(defaultSize)}" min="1" style="width:120px">
-                    <div class="help">Total number of movies this run should process, starting from Start. Requests to the server are automatically split into small chunks (${BATCH_CHUNK_SIZE} at a time) regardless of this number, so progress updates stay frequent even on a large run.</div>
+                    <label class="checkbox"><input type="radio" name="b-mode" id="b-mode-custom" checked> Custom amount</label>
+                    <label class="checkbox" style="margin-left:20px;"><input type="radio" name="b-mode" id="b-mode-all"> All movies in this library (<span id="b-all-count">…</span>)</label>
+                    <div id="b-custom-controls" style="margin-top:10px;">
+                        <input type="number" id="b-limit" value="${esc(defaultSize)}" min="1" style="width:120px">
+                        <div class="help">Total number of movies this run should process, starting from Start. Runs in small chunks in the background regardless of this number, so progress updates stay frequent even on a large run.</div>
+                    </div>
                 </div>
             </div>
-            <div class="setting-row">
+            <div class="setting-row" id="b-startstop-row">
                 <div class="label">Start / Stop</div>
                 <div class="control-wrap" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
                     <input type="number" id="b-start" value="0" min="0" style="width:110px" placeholder="Start">
@@ -302,6 +379,7 @@ async function viewBatch(content, toolbar) {
             <button class="btn btn-danger" id="b-stop-btn" style="display:none">Stop</button>
         </div>
         <div id="b-progress" style="display:none">
+            <div style="font-size:13px; margin-bottom:6px;" id="b-status-line"></div>
             <div class="progress-outer"><div class="progress-inner" id="b-progress-bar" style="width:0%"></div></div>
             <div id="b-progress-label" style="font-size:12px;color:var(--text-muted)"></div>
         </div>
@@ -309,98 +387,126 @@ async function viewBatch(content, toolbar) {
         <div id="batch-summary"></div>
     `;
 
-    document.getElementById('b-start-btn').addEventListener('click', runBatchLoop);
-    document.getElementById('b-stop-btn').addEventListener('click', () => { batchAbort = true; });
-}
+    const librarySelect = document.getElementById('b-library');
+    const allCountEl = document.getElementById('b-all-count');
+    const modeCustom = document.getElementById('b-mode-custom');
+    const modeAll = document.getElementById('b-mode-all');
+    const customControls = document.getElementById('b-custom-controls');
+    const startStopRow = document.getElementById('b-startstop-row');
 
-async function runBatchLoop() {
-    const sectionId = parseInt(document.getElementById('b-library').value, 10);
-    const assetTypes = [...document.querySelectorAll('.b-asset:checked')].map(c => c.value);
-    const totalToProcess = Math.max(1, parseInt(document.getElementById('b-limit').value, 10) || 25);
-    const start = Math.max(0, parseInt(document.getElementById('b-start').value, 10) || 0);
-    const stopInput = document.getElementById('b-stop').value;
-    // Blank Stop means "just this many movies" (Start + Movies to Process), NOT
-    // "run to the end of the library".
-    const stop = stopInput ? parseInt(stopInput, 10) : (start + totalToProcess);
-    const dryRun = document.getElementById('b-dryrun').checked;
-
-    if (!assetTypes.length) { toast('Choose at least one asset type', 'error'); return; }
-
-    batchAbort = false;
-    document.getElementById('b-start-btn').style.display = 'none';
-    document.getElementById('b-stop-btn').style.display = '';
-    document.getElementById('b-progress').style.display = '';
-    const log = document.getElementById('batch-log');
-    const summaryBox = document.getElementById('batch-summary');
-    log.innerHTML = '';
-    summaryBox.innerHTML = '';
-
-    const totals = { new: 0, updated: 0, unchanged: 0, failed: 0, kept_existing: 0 };
-    const changedItems = [];
-    const failedItems = [];
-    let cursor = start;
-    let totalSize = null;
-
-    while (cursor < stop && !batchAbort) {
-        // Never ask the server for more than what's actually left before `stop` -
-        // this is what guarantees the run can't overshoot the requested total,
-        // regardless of any server-side chunk size cap.
-        const requestSize = Math.min(BATCH_CHUNK_SIZE, stop - cursor);
-        let result;
+    async function refreshCount() {
+        allCountEl.textContent = '…';
         try {
-            result = await api('process_batch.php', {
-                method: 'POST',
-                body: JSON.stringify({ sectionId, start: cursor, size: requestSize, assetTypes, dryRun }),
-            });
+            const { total } = await api('library_count.php?sectionId=' + librarySelect.value);
+            allCountEl.textContent = total;
         } catch (e) {
-            toast(e.message, 'error');
-            break;
+            allCountEl.textContent = '?';
         }
+    }
+    function applyMode() {
+        const allMode = modeAll.checked;
+        customControls.style.display = allMode ? 'none' : '';
+        startStopRow.style.display = allMode ? 'none' : '';
+    }
+    librarySelect.addEventListener('change', refreshCount);
+    modeCustom.addEventListener('change', applyMode);
+    modeAll.addEventListener('change', applyMode);
+    refreshCount();
+    applyMode();
 
-        totalSize = result.totalSize;
-        const effectiveStop = Math.min(stop, totalSize);
-
-        for (const item of result.items) {
-            const tags = [];
-            for (const [type, r] of Object.entries(item.assets)) {
-                const status = r.status;
-                if (['new', 'updated', 'would_create', 'would_update_or_match'].includes(status)) {
-                    tags.push(`${ASSET_LABELS[type]} ${statusBadge(status)}`);
-                }
-                if (status === 'failed' || status === 'would_fail') {
-                    failedItems.push({ title: item.title, path: item.displayPath || item.path, type, error: r.error });
-                }
-                if (totals[status] !== undefined) totals[status]++;
+    function enterBatchProgressMode(job) {
+        document.getElementById('b-form-card').style.display = 'none';
+        document.getElementById('b-start-btn').style.display = 'none';
+        document.getElementById('b-stop-btn').style.display = '';
+        document.getElementById('b-stop-btn').dataset.jobId = job.id;
+        document.getElementById('b-progress').style.display = '';
+        document.getElementById('batch-log').innerHTML = '';
+        document.getElementById('batch-summary').innerHTML = '';
+        renderBatchProgress(job);
+        startJobPolling(job.id, updated => {
+            renderBatchProgress(updated);
+            if (['done', 'failed', 'cancelled'].includes(updated.status)) {
+                document.getElementById('b-form-card').style.display = '';
+                document.getElementById('b-start-btn').style.display = '';
+                document.getElementById('b-stop-btn').style.display = 'none';
+                document.getElementById('b-progress').style.display = 'none';
+                renderBatchSummary(document.getElementById('batch-summary'), updated);
+                if (updated.status === 'cancelled') toast('Batch stopped.', 'info');
+                else if (updated.status === 'failed') toast('Batch failed: ' + (updated.error || 'unknown error'), 'error');
+                else toast('Batch complete.', 'success');
             }
-            if (tags.length) {
-                changedItems.push({ title: item.title, path: item.displayPath || item.path, tags });
-                log.insertAdjacentHTML('beforeend', `<div class="log-line"><span class="title">${esc(item.title)}</span> — ${tags.join(', ')}</div>`);
-                log.scrollTop = log.scrollHeight;
-            }
-        }
-
-        cursor = result.nextStart;
-        const pct = effectiveStop > start ? Math.min(100, Math.round(((cursor - start) / (effectiveStop - start)) * 100)) : 100;
-        document.getElementById('b-progress-bar').style.width = pct + '%';
-        document.getElementById('b-progress-label').textContent = `${cursor} of ${effectiveStop} (library total: ${totalSize})`;
-
-        if (result.done) break;
+        });
     }
 
-    document.getElementById('b-start-btn').style.display = '';
-    document.getElementById('b-stop-btn').style.display = 'none';
+    function renderBatchProgress(job) {
+        document.getElementById('b-status-line').innerHTML = jobStatusBadge(job.status);
+        document.getElementById('b-progress-bar').style.width = job.pct + '%';
+        document.getElementById('b-progress-label').textContent = jobProgressLabel(job);
+        const log = document.getElementById('batch-log');
+        log.innerHTML = job.recentItems.map(i => `<div class="log-line"><span class="title">${esc(i.title)}</span> — ${ASSET_LABELS[i.assetType] || i.assetType} ${statusBadge(i.status)}${i.error ? ': ' + esc(i.error) : ''}</div>`).join('');
+    }
 
-    renderBatchSummary(summaryBox, totals, changedItems, failedItems, batchAbort);
-    if (batchAbort) toast('Batch stopped.', 'info');
-    else toast('Batch complete.', 'success');
+    if (activeJob && activeJob.type === 'batch') {
+        enterBatchProgressMode(activeJob);
+    } else if (activeJob && activeJob.type === 'sync') {
+        document.getElementById('b-start-btn').disabled = true;
+        const banner = document.getElementById('b-blocked-banner');
+        banner.style.display = '';
+        banner.textContent = 'A library sync is currently running — see the Movies screen. Batch can start once it finishes.';
+    }
+
+    document.getElementById('b-start-btn').addEventListener('click', async () => {
+        const sectionId = parseInt(librarySelect.value, 10);
+        const sectionTitle = librarySelect.selectedOptions[0]?.textContent;
+        const assetTypes = [...document.querySelectorAll('.b-asset:checked')].map(c => c.value);
+        if (!assetTypes.length) { toast('Choose at least one asset type', 'error'); return; }
+        const dryRun = document.getElementById('b-dryrun').checked;
+
+        const body = { type: 'batch', sectionId, sectionTitle, assetTypes, dryRun };
+        if (modeAll.checked) {
+            body.allMovies = true;
+        } else {
+            const totalToProcess = Math.max(1, parseInt(document.getElementById('b-limit').value, 10) || 25);
+            const start = Math.max(0, parseInt(document.getElementById('b-start').value, 10) || 0);
+            const stopInput = document.getElementById('b-stop').value;
+            // Blank Stop means "just this many movies" (Start + Movies to Process),
+            // NOT "run to the end of the library".
+            body.start = start;
+            body.stop = stopInput ? parseInt(stopInput, 10) : (start + totalToProcess);
+        }
+
+        try {
+            const { job } = await api('jobs_start.php', { method: 'POST', body: JSON.stringify(body) });
+            enterBatchProgressMode(job);
+        } catch (e) {
+            toast(e.message, 'error');
+        }
+    });
+
+    document.getElementById('b-stop-btn').addEventListener('click', async e => {
+        try {
+            await api('jobs_cancel.php', { method: 'POST', body: JSON.stringify({ id: parseInt(e.target.dataset.jobId, 10) }) });
+        } catch (err) {
+            toast(err.message, 'error');
+        }
+    });
 }
 
-function renderBatchSummary(box, totals, changedItems, failedItems, wasAborted) {
+/**
+ * job.counts/job.recentItems come from the server now instead of being
+ * accumulated client-side chunk by chunk - recentItems is a capped ring
+ * buffer (most recent 50), so on a very large run this table shows the most
+ * recent changes/failures, not necessarily every single one.
+ */
+function renderBatchSummary(box, job) {
+    const totals = Object.assign({ new: 0, updated: 0, unchanged: 0, failed: 0, kept_existing: 0 }, job.counts);
+    const changedItems = job.recentItems.filter(i => ['new', 'updated', 'would_create', 'would_update_or_match'].includes(i.status));
+    const failedItems = job.recentItems.filter(i => ['failed', 'would_fail'].includes(i.status));
     const changedCount = changedItems.length;
     const failedCount = failedItems.length;
 
     let html = `
-        <h2 class="section-title">Summary${wasAborted ? ' (stopped early)' : ''}</h2>
+        <h2 class="section-title">Summary${job.status === 'cancelled' ? ' (stopped early)' : ''}</h2>
         <div class="stat-grid">
             <div class="stat-tile"><div class="num">${totals.new}</div><div class="label">New</div></div>
             <div class="stat-tile"><div class="num">${totals.updated}</div><div class="label">Updated</div></div>
@@ -411,17 +517,17 @@ function renderBatchSummary(box, totals, changedItems, failedItems, wasAborted) 
     `;
 
     if (changedCount) {
-        html += `<h3>Changed Items (${changedCount})</h3><table class="data-table"><thead><tr><th>Title</th><th>Path</th><th>Changed</th></tr></thead><tbody>`;
+        html += `<h3>Changed Items (most recent ${changedCount})</h3><table class="data-table"><thead><tr><th>Title</th><th>Path</th><th>Changed</th></tr></thead><tbody>`;
         for (const c of changedItems) {
-            html += `<tr><td>${esc(c.title)}</td><td class="path">${esc(c.path || '')}</td><td>${c.tags.join(' ')}</td></tr>`;
+            html += `<tr><td>${esc(c.title)}</td><td class="path">${esc(c.path || '')}</td><td>${ASSET_LABELS[c.assetType] || c.assetType} ${statusBadge(c.status)}</td></tr>`;
         }
         html += `</tbody></table>`;
     }
 
     if (failedCount) {
-        html += `<h3 style="margin-top:20px">Failed Items (${failedCount})</h3><table class="data-table"><thead><tr><th>Title</th><th>Path</th><th>Asset</th><th>Error</th></tr></thead><tbody>`;
+        html += `<h3 style="margin-top:20px">Failed Items (most recent ${failedCount})</h3><table class="data-table"><thead><tr><th>Title</th><th>Path</th><th>Asset</th><th>Error</th></tr></thead><tbody>`;
         for (const f of failedItems) {
-            html += `<tr><td>${esc(f.title)}</td><td class="path">${esc(f.path || '')}</td><td>${ASSET_LABELS[f.type] || f.type}</td><td>${esc(f.error || '')}</td></tr>`;
+            html += `<tr><td>${esc(f.title)}</td><td class="path">${esc(f.path || '')}</td><td>${ASSET_LABELS[f.assetType] || f.assetType}</td><td>${esc(f.error || '')}</td></tr>`;
         }
         html += `</tbody></table>`;
     }
@@ -470,6 +576,7 @@ async function viewMovies(content, toolbar) {
                 metadata-only, no artwork is downloaded. Run this before your first Batch, or any time
                 titles/paths may have changed in Plex.
             </p>
+            <div id="sync-blocked-banner" class="banner banner-warn" style="display:none"></div>
             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                 <span id="m-library-slot"></span>
                 <button class="btn btn-primary" id="m-sync">Sync Library</button>
@@ -493,6 +600,57 @@ async function viewMovies(content, toolbar) {
             `<select id="m-library">${libraries.map(l => `<option value="${l.id}">${esc(l.title)}</option>`).join('')}</select>`;
     }
 
+    async function startSync() {
+        const sectionId = parseInt(document.getElementById('m-library')?.value, 10);
+        if (!sectionId) { toast('No movie library available to sync', 'error'); return; }
+        const sectionTitle = document.getElementById('m-library').selectedOptions[0]?.textContent;
+        try {
+            const { job } = await api('jobs_start.php', { method: 'POST', body: JSON.stringify({ type: 'sync', sectionId, sectionTitle }) });
+            enterSyncProgressMode(job);
+        } catch (e) {
+            toast(e.message, 'error');
+        }
+    }
+
+    function enterSyncProgressMode(job) {
+        document.getElementById('m-sync').style.display = 'none';
+        const stopBtn = document.getElementById('m-sync-stop');
+        stopBtn.style.display = '';
+        stopBtn.dataset.jobId = job.id;
+        document.getElementById('sync-progress').style.display = '';
+        renderSyncProgress(job);
+        startJobPolling(job.id, updated => {
+            renderSyncProgress(updated);
+            if (['done', 'failed', 'cancelled'].includes(updated.status)) {
+                document.getElementById('m-sync').style.display = '';
+                stopBtn.style.display = 'none';
+                if (updated.status === 'cancelled') toast('Sync stopped.', 'info');
+                else if (updated.status === 'failed') toast('Sync failed: ' + (updated.error || 'unknown error'), 'error');
+                else toast('Library sync complete.', 'success');
+                load();
+            }
+        });
+    }
+
+    function renderSyncProgress(job) {
+        document.getElementById('sync-current').innerHTML = jobStatusBadge(job.status);
+        document.getElementById('sync-progress-bar').style.width = job.pct + '%';
+        document.getElementById('sync-summary').textContent = jobProgressLabel(job);
+        document.getElementById('sync-log').innerHTML = job.recentItems.map(i =>
+            `<div class="log-line">⚠️ Skipped <span class="title">${esc(i.title)}</span> — ${esc(i.error || '')}</div>`
+        ).join('');
+    }
+
+    const activeJob = (await api('jobs_status.php')).job;
+    if (activeJob && activeJob.type === 'sync') {
+        enterSyncProgressMode(activeJob);
+    } else if (activeJob && activeJob.type === 'batch') {
+        document.getElementById('m-sync').disabled = true;
+        const banner = document.getElementById('sync-blocked-banner');
+        banner.style.display = '';
+        banner.textContent = 'A batch process is currently running — see the Batch Process screen. Sync can start once it finishes.';
+    }
+
     async function load() {
         tableArea.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading…</div>';
         const params = new URLSearchParams({ q: state.q, limit: state.limit, offset: state.offset, sort: state.sort, dir: state.dir });
@@ -504,8 +662,14 @@ async function viewMovies(content, toolbar) {
     }
 
     document.getElementById('m-search').addEventListener('input', debounce(e => { state.q = e.target.value; state.offset = 0; load(); }, 300));
-    document.getElementById('m-sync').addEventListener('click', () => runSync(document.getElementById('m-library')?.value, load));
-    document.getElementById('m-sync-stop').addEventListener('click', () => { syncAbort = true; });
+    document.getElementById('m-sync').addEventListener('click', startSync);
+    document.getElementById('m-sync-stop').addEventListener('click', async e => {
+        try {
+            await api('jobs_cancel.php', { method: 'POST', body: JSON.stringify({ id: parseInt(e.target.dataset.jobId, 10) }) });
+        } catch (err) {
+            toast(err.message, 'error');
+        }
+    });
     document.getElementById('m-sort').addEventListener('change', e => { state.sort = e.target.value; state.offset = 0; load(); });
     document.getElementById('m-sort-dir').addEventListener('click', () => {
         state.dir = state.dir === 'asc' ? 'desc' : 'asc';
@@ -569,70 +733,6 @@ function renderMovieTable(content, data) {
     content.querySelectorAll('tr.clickable').forEach(tr => {
         tr.addEventListener('click', () => { location.hash = '#/movies/' + tr.dataset.ratingkey; });
     });
-}
-
-const SYNC_CHUNK_SIZE = 20; // small and fixed, same reasoning as BATCH_CHUNK_SIZE - frequent visible progress
-let syncAbort = false;
-
-async function runSync(sectionId, onDone) {
-    if (!sectionId) { toast('No movie library available to sync', 'error'); return; }
-
-    const summaryEl = document.getElementById('sync-summary');
-    const progressWrap = document.getElementById('sync-progress');
-    const progressBar = document.getElementById('sync-progress-bar');
-    const currentEl = document.getElementById('sync-current');
-    const logEl = document.getElementById('sync-log');
-    const syncBtn = document.getElementById('m-sync');
-    const stopBtn = document.getElementById('m-sync-stop');
-
-    syncAbort = false;
-    if (progressWrap) progressWrap.style.display = '';
-    if (logEl) logEl.innerHTML = '';
-    if (syncBtn) syncBtn.style.display = 'none';
-    if (stopBtn) stopBtn.style.display = '';
-
-    let start = 0;
-    let done = false;
-    let total = 0;
-    let synced = 0;
-
-    try {
-        while (!done && !syncAbort) {
-            const result = await api('sync_library.php', { method: 'POST', body: JSON.stringify({ sectionId, start, size: SYNC_CHUNK_SIZE }) });
-            start = result.nextStart;
-            total = result.totalSize;
-            done = result.done;
-            synced += result.synced;
-
-            for (const item of result.items || []) {
-                if (currentEl) currentEl.textContent = `Checking: ${item.title} (#${item.ratingKey})`;
-                if (logEl && !item.ok) {
-                    logEl.insertAdjacentHTML('beforeend', `<div class="log-line">⚠️ Skipped <span class="title">${esc(item.title)}</span> (#${item.ratingKey}) — Plex couldn't serve full metadata for it right now</div>`);
-                    logEl.scrollTop = logEl.scrollHeight;
-                }
-            }
-
-            const pct = total > 0 ? Math.min(100, Math.round((start / total) * 100)) : 100;
-            if (progressBar) progressBar.style.width = pct + '%';
-            if (summaryEl) summaryEl.textContent = `Syncing… ${start} of ${total}`;
-        }
-
-        if (currentEl) currentEl.textContent = '';
-        if (syncAbort) {
-            if (summaryEl) summaryEl.textContent = `Stopped after ${synced} of ${total} movies.`;
-            toast('Sync stopped.', 'info');
-        } else {
-            if (summaryEl) summaryEl.textContent = `Synced ${synced} movies.`;
-            toast('Library sync complete.', 'success');
-        }
-        if (onDone) onDone();
-    } catch (e) {
-        if (summaryEl) summaryEl.textContent = 'Sync failed.';
-        toast('Sync failed: ' + e.message, 'error');
-    } finally {
-        if (syncBtn) syncBtn.style.display = '';
-        if (stopBtn) stopBtn.style.display = 'none';
-    }
 }
 
 function debounce(fn, ms) {
@@ -1042,6 +1142,85 @@ async function runDiagnostics() {
 }
 
 /* ==========================================================================
+   Log View
+   ========================================================================== */
+
+async function viewLogs(content, toolbar) {
+    const state = { level: '', offset: 0, limit: 50 };
+
+    toolbar.innerHTML = `
+        <span class="toolbar-title">Logs</span>
+        <select id="l-level">
+            <option value="">All levels</option>
+            <option value="debug">Debug</option>
+            <option value="info">Info</option>
+            <option value="warn">Warn</option>
+            <option value="error">Error</option>
+        </select>
+        <button class="btn" id="l-refresh">Refresh</button>
+    `;
+
+    content.innerHTML = '<div id="logs-area"></div>';
+    const logsArea = document.getElementById('logs-area');
+
+    async function load() {
+        logsArea.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading…</div>';
+        const params = new URLSearchParams({ limit: state.limit, offset: state.offset });
+        if (state.level) params.set('level', state.level);
+        const data = await api('logs.php?' + params.toString());
+        renderLogTable(logsArea, data);
+    }
+
+    function renderLogTable(box, data) {
+        if (!data.logs.length) {
+            box.innerHTML = `<div class="empty-state">No log entries${state.level ? ' at this level' : ''} yet. ${state.level === '' ? 'Debug-level entries only appear once Debug Mode is turned on in Settings.' : ''}</div>`;
+            return;
+        }
+        const rows = data.logs.map(l => `
+            <tr>
+                <td style="white-space:nowrap">${fmtDate(l.created_at)}</td>
+                <td>${logLevelBadge(l.level)}</td>
+                <td>${l.job_id ? '#' + l.job_id : ''}</td>
+                <td>${esc(l.message)}</td>
+            </tr>`).join('');
+
+        const totalPages = Math.ceil(data.total / data.limit);
+        const curPage = Math.floor(data.offset / data.limit) + 1;
+        const pagination = totalPages > 1 ? `
+            <div class="pagination">
+                <button class="btn" ${data.offset === 0 ? 'disabled' : ''} data-page="${Math.max(0, data.offset - data.limit)}">← Prev</button>
+                <span>Page ${curPage} of ${totalPages}</span>
+                <button class="btn" ${curPage >= totalPages ? 'disabled' : ''} data-page="${data.offset + data.limit}">Next →</button>
+            </div>` : '';
+
+        box.innerHTML = `
+            <table class="data-table">
+                <thead><tr><th>Time</th><th>Level</th><th>Job</th><th>Message</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            ${pagination}
+        `;
+    }
+
+    document.getElementById('l-level').addEventListener('change', e => { state.level = e.target.value; state.offset = 0; load(); });
+    document.getElementById('l-refresh').addEventListener('click', () => load());
+    logsArea.addEventListener('click', function delegated(e) {
+        const pageBtn = e.target.closest('[data-page]');
+        if (pageBtn) {
+            state.offset = parseInt(pageBtn.dataset.page, 10);
+            load();
+        }
+    });
+
+    await load();
+}
+
+function logLevelBadge(level) {
+    const cls = { debug: 'badge-none', info: 'badge-unchanged', warn: 'badge-kept_existing', error: 'badge-failed' }[level] || 'badge-none';
+    return `<span class="badge ${cls}">${esc(level)}</span>`;
+}
+
+/* ==========================================================================
    Help
    ========================================================================== */
 
@@ -1154,6 +1333,17 @@ async function viewSettings(content, toolbar) {
             </div>
         </div>
 
+        <div class="card section-block">
+            <h3 style="margin-top:0">Logging</h3>
+            <div class="setting-row">
+                <div class="label">Debug Mode</div>
+                <div class="control-wrap">
+                    <label class="checkbox"><input type="checkbox" id="s-debug-mode" ${s.debug_mode === '1' ? 'checked' : ''}> Debug Mode</label>
+                    <div class="help">Adds per-chunk detail from Sync/Batch jobs to the <a href="#/logs">Logs</a> screen. Off by default to keep the log small.</div>
+                </div>
+            </div>
+        </div>
+
         <button class="btn btn-primary" id="s-save">Save Changes</button>
     `;
 
@@ -1170,6 +1360,7 @@ async function viewSettings(content, toolbar) {
                     batch_default_size: document.getElementById('s-batchsize').value,
                     mapped_folders_json: document.getElementById('s-mapped').value,
                     base_path: document.getElementById('s-basepath').value.trim(),
+                    debug_mode: document.getElementById('s-debug-mode').checked ? '1' : '0',
                 }),
             });
             toast('Settings saved.', 'success');

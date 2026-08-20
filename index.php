@@ -46,6 +46,7 @@ try {
             <div class="nav-item" data-route="#/movies" onclick="location.hash='#/movies'"><span class="icon">&#127916;</span> Movies</div>
             <div class="nav-item" data-route="#/review" onclick="location.hash='#/review'"><span class="icon">&#9888;</span> Needs Review</div>
             <div class="nav-item" data-route="#/diagnostics" onclick="location.hash='#/diagnostics'"><span class="icon">&#128269;</span> Diagnostics</div>
+            <div class="nav-item" data-route="#/logs" onclick="location.hash='#/logs'"><span class="icon">&#128220;</span> Logs</div>
             <div class="nav-item" data-route="#/settings" onclick="location.hash='#/settings'"><span class="icon">&#9881;</span> Settings</div>
             <div class="nav-item" data-route="#/help" onclick="location.hash='#/help'"><span class="icon">&#10067;</span> Help</div>
         </nav>

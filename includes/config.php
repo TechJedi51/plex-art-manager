@@ -24,7 +24,7 @@ define('DB_PATH', DATA_DIR . '/app.sqlite');
 
 // Bump this on meaningful changes - shown in the sidebar so it's obvious at a
 // glance whether a given browser/deploy is actually running the latest code.
-define('APP_VERSION', '1.8.0');
+define('APP_VERSION', '1.9.0');
 
 // data/ and cache/ must be writable by the php-fpm user (e.g. `chown -R www-data:www-data data cache`
 // or on macOS, the user php-fpm runs as — see README.md).
@@ -39,6 +39,8 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/settings.php';
 require_once __DIR__ . '/helpers.php';
 require_once __DIR__ . '/plex.php';
+require_once __DIR__ . '/jobs.php';
+require_once __DIR__ . '/logs.php';
 
 /**
  * Standard JSON response helper for api/*.php endpoints.

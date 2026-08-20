@@ -162,6 +162,45 @@ function process_one_asset(PlexClient $plex, int $ratingKey, string $title, ?str
     return array_filter(['status' => $status, 'filename' => $filename, 'error' => $error]);
 }
 
+/**
+ * Process one page of a library section, metadata-only (title, path, tmdb/imdb
+ * ids) - no image downloads. Same "one page per call" shape as run_batch(), so
+ * both api/sync_library.php (one chunk per AJAX call) and cli/job_worker.php
+ * (looping until done) can share it.
+ */
+function run_sync_page(PlexClient $plex, int $sectionId, int $start, int $size): array
+{
+    $page = $plex->getSectionItems($sectionId, $start, $size, 'movie');
+
+    $items = [];
+    foreach ($page['items'] as $summary) {
+        $ratingKey = (int) $summary['ratingKey'];
+        try {
+            $item = $plex->getItemFull($ratingKey);
+        } catch (Throwable $e) {
+            $items[] = ['ratingKey' => $ratingKey, 'title' => $summary['title'] ?? "#{$ratingKey}", 'ok' => false];
+            continue; // skip items Plex can't currently serve full metadata for
+        }
+        $folder = $plex->itemFolderPath($item);
+        $tmdbId = $plex->itemTmdbId($item);
+        $imdbId = $plex->itemImdbId($item);
+        $title = $item['title'] ?? "#{$ratingKey}";
+        upsert_movie($ratingKey, $sectionId, $title, $item['year'] ?? null, $folder, $tmdbId, $imdbId);
+        $items[] = ['ratingKey' => $ratingKey, 'title' => $title, 'ok' => true];
+    }
+
+    return [
+        'sectionId' => $sectionId,
+        'start'     => $start,
+        'size'      => $size,
+        'totalSize' => $page['totalSize'],
+        'nextStart' => $start + count($page['items']),
+        'done'      => ($start + count($page['items'])) >= $page['totalSize'],
+        'synced'    => count($items),
+        'items'     => $items,
+    ];
+}
+
 function upsert_movie(int $ratingKey, int $sectionId, string $title, ?int $year, ?string $folder, ?int $tmdbId, ?string $imdbId): void
 {
     $stmt = get_db()->prepare('

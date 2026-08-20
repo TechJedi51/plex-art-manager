@@ -241,6 +241,9 @@ table.data-table td.path { color: var(--text-muted); font-size: 12px; font-famil
 .badge-kept_existing { background: var(--warning-bg); color: var(--warning); }
 .badge-failed { background: var(--danger-bg); color: var(--danger); }
 .badge-none { background: var(--neutral-bg); color: #aaa; }
+.badge-queued { background: var(--neutral-bg); color: var(--text-muted); }
+.badge-running { background: var(--accent-bg); color: var(--accent-dark); }
+.badge-cancelled { background: var(--warning-bg); color: var(--warning); }
 
 /* ---------------------------------------------------------------------- */
 /* Batch progress                                                         */
