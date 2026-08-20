@@ -1,10 +1,13 @@
 name: Publish Docker image
 
-# Fires the moment a version tag (e.g. v1.7.0) is pushed - including from
-# GitHub Desktop's "Create Tag" - so the image is already built and available
-# by the time you write up a GitHub Release for that same tag.
+# Fires on every push to main (publishing a rolling "testing" image) and the
+# moment a version tag (e.g. v1.7.0) is pushed - including from GitHub
+# Desktop's "Create Tag" - so the image is already built and available by the
+# time you write up a GitHub Release for that same tag.
 'on':
   push:
+    branches:
+      - main
     tags:
       - 'v*.*.*'
 
@@ -52,6 +55,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=testing,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
