@@ -10,6 +10,10 @@
 declare(strict_types=1);
 error_reporting(E_ALL);
 ini_set('display_errors', '0'); // never leak PHP errors/paths into JSON API responses
+ini_set('log_errors', '1');
+// php://stderr lands in `docker logs` alongside nginx/php-fpm output (see
+// docker/supervisord.conf) - no extra volume or log file to go find.
+ini_set('error_log', 'php://stderr');
 date_default_timezone_set('America/Los_Angeles');
 
 define('APP_ROOT', dirname(__DIR__));
@@ -20,7 +24,7 @@ define('DB_PATH', DATA_DIR . '/app.sqlite');
 
 // Bump this on meaningful changes - shown in the sidebar so it's obvious at a
 // glance whether a given browser/deploy is actually running the latest code.
-define('APP_VERSION', '1.7.4');
+define('APP_VERSION', '1.8.0');
 
 // data/ and cache/ must be writable by the php-fpm user (e.g. `chown -R www-data:www-data data cache`
 // or on macOS, the user php-fpm runs as — see README.md).

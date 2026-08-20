@@ -160,6 +160,20 @@ function highlightNav(hash) {
 window.addEventListener('hashchange', router);
 window.addEventListener('DOMContentLoaded', router);
 
+// router()'s own try/catch only covers errors thrown while rendering a view.
+// Anything else uncaught (a bug outside that path, a failed background
+// promise) would otherwise fail silently and leave whatever was on screen -
+// often just the loading spinner - stuck there with zero indication why.
+function showFatalError(message) {
+    console.error('Unhandled error:', message);
+    const content = document.getElementById('content');
+    if (content) {
+        content.innerHTML = `<div class="banner banner-danger">Unexpected error: ${esc(String(message))}. Check the browser console for details.</div>`;
+    }
+}
+window.addEventListener('error', (e) => showFatalError(e.message));
+window.addEventListener('unhandledrejection', (e) => showFatalError(e.reason && e.reason.message ? e.reason.message : e.reason));
+
 /* ==========================================================================
    Dashboard
    ========================================================================== */

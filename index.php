@@ -1,7 +1,29 @@
 <?php
 require_once __DIR__ . '/includes/config.php';
 // Just bootstraps the DB/schema on first load; the page itself is a static shell — all data comes via AJAX.
-get_db();
+// A blank page on load almost always means a fatal error happened here, before
+// any HTML was sent - display_errors is off in production (see config.php), so
+// without this the browser gets nothing and the cause only exists in `docker
+// logs` as an uncaught-exception line. Catch it and show something instead.
+try {
+    get_db();
+} catch (Throwable $e) {
+    error_log('Bootstrap failure: ' . $e);
+    http_response_code(500);
+    ?>
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Plex Art Manager - Error</title></head>
+<body style="font-family: sans-serif; max-width: 640px; margin: 4rem auto; line-height: 1.5;">
+<h1>Plex Art Manager failed to start</h1>
+<p>The app hit an error while setting up its database. Full details were written to the container's log - run:</p>
+<pre style="background:#eee; padding:1rem; overflow:auto;">docker logs plex-art-manager --tail 50</pre>
+<p>Common causes: <code>data/</code> isn't writable by the container (PUID/PGID mismatch), or the SQLite file is corrupted.</p>
+</body>
+</html>
+    <?php
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
