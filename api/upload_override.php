@@ -58,5 +58,6 @@ if (!move_uploaded_file($tmpUpload, $existingFile)) {
 
 log_asset_history($ratingKey, $assetType, $status, 'manual', $filename, 'Manually uploaded');
 resolve_pending_review($ratingKey, $assetType);
+log_line(null, 'info', 'Uploaded ' . ASSET_LABELS[$assetType] . ' for "' . movie_title($ratingKey) . "\" (#{$ratingKey}) — {$filename} ({$status})");
 
 json_out(['status' => $status, 'filename' => $filename]);

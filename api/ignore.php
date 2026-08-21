@@ -94,12 +94,14 @@ if ($method === 'POST') {
     ');
     $stmt->execute(['rk' => $ratingKey, 'at' => $assetType, 'note' => $note, 'ts' => now_iso()]);
     resolve_pending_review($ratingKey, $assetType);
+    log_line(null, 'info', 'Ignored ' . ASSET_LABELS[$assetType] . ' for "' . movie_title($ratingKey) . "\" (#{$ratingKey})" . ($note !== '' ? " — {$note}" : ''));
     json_out(['ignored' => true]);
 }
 
 if ($method === 'DELETE') {
     $stmt = get_db()->prepare('DELETE FROM ignore_list WHERE rating_key = :rk AND asset_type = :at');
     $stmt->execute(['rk' => $ratingKey, 'at' => $assetType]);
+    log_line(null, 'info', 'Un-ignored ' . ASSET_LABELS[$assetType] . ' for "' . movie_title($ratingKey) . "\" (#{$ratingKey})");
     json_out(['ignored' => false]);
 }
 

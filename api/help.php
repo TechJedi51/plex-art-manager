@@ -158,14 +158,43 @@ $sections = [
         'id' => 'logs',
         'title' => 'Logs',
         'body' => '
-            <p>A searchable history of app activity - primarily Sync/Batch job starts, finishes, cancellations,
-            and failures, plus any real application errors. Filter by level (Debug / Info / Warn / Error) and
-            page through with Prev/Next; each entry shows which job it belongs to, if any.</p>
+            <p>A searchable history of app activity - Sync/Batch job starts, finishes, cancellations, and
+            failures; every manual Ignore/Un-ignore, upload override, and candidate image applied from Needs
+            Review or a movie\'s detail page; plus any real application errors. Filter by level (Debug / Info /
+            Warn / Error) and page through with Prev/Next; each entry shows which job it belongs to, if any.</p>
             <p><strong>Debug Mode</strong> (Settings page, off by default) adds a lot more detail here - a line
             for every chunk a Sync or Batch job processes, not just the start/finish summary. Leave it off for
             normal use; turn it on temporarily if you need to see exactly what a job did step by step. Info,
             Warn, and Error entries are always recorded regardless of this setting, so a job\'s outcome is never
-            lost even with Debug Mode off.</p>',
+            lost even with Debug Mode off.</p>
+            <p><strong>Export Logs (CSV)</strong> downloads this narrative activity log, honoring the current
+            level filter. <strong>Export Asset History (CSV)</strong> downloads the full per-movie, per-asset
+            save/skip/failure record from every Sync, Batch, upload, and candidate apply ever run - the same
+            data shown (capped to the most recent 100) on each movie\'s detail page - as a complete,
+            unfiltered audit trail.</p>',
+    ],
+    [
+        'id' => 'cron',
+        'title' => 'Cron / Unattended Sweeps',
+        'body' => '
+            <p><code>cli/process_batch_cli.php</code> runs a full-library sweep from the command line, reusing
+            the exact same batch logic (<code>run_batch()</code>) as the web UI - it\'s meant to be driven by
+            cron for unattended, scheduled runs rather than needing the browser open.</p>
+            <pre><code>php cli/process_batch_cli.php --library="Movies" --types=poster,art,square,logo [--chunk=25] [--dry-run]</code></pre>
+            <p><strong>--library</strong> - the exact Plex library section title (case-insensitive).
+            <strong>--types</strong> - a comma-separated subset of <code>poster,art,square,logo</code>.
+            <strong>--chunk</strong> - optional, items processed per internal page (default 25).
+            <strong>--dry-run</strong> - optional, checks without downloading or writing anything.</p>
+            <p>Example crontab entry - poster+background daily, square/logo weekly since they\'re slower (each
+            requires one extra Plex API call per movie):</p>
+            <pre><code>0 3 * * * php /path/to/plex-art-manager/cli/process_batch_cli.php --library="Movies" --types=poster,art >> /path/to/plex-art-manager/data/cron.log 2>&1
+0 4 * * 0 php /path/to/plex-art-manager/cli/process_batch_cli.php --library="Movies" --types=square,logo >> /path/to/plex-art-manager/data/cron.log 2>&1</code></pre>
+            <p>Inside the Docker image, run it via <code>docker compose exec plex-art-manager php cli/process_batch_cli.php ...</code>
+            from the host\'s own cron instead of installing cron inside the container. Output (a summary of
+            new/updated/unchanged/failed counts, plus a list of any failed titles) goes to stdout/stderr, so
+            redirect it to a log file as shown above if you want a persistent record - each run also still
+            writes its own asset-level results to <strong>Asset History</strong> and a start/finish line to
+            <strong>Logs</strong> the same as a browser-driven Batch run does.</p>',
     ],
     [
         'id' => 'settings',

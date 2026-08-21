@@ -1202,15 +1202,19 @@ async function viewLogs(content, toolbar) {
             <option value="error">Error</option>
         </select>
         <button class="btn" id="l-refresh">Refresh</button>
+        <a class="btn" id="l-export-logs" href="api/logs_export.php">Export Logs (CSV)</a>
+        <a class="btn" id="l-export-history" href="api/history_export.php">Export Asset History (CSV)</a>
     `;
 
     content.innerHTML = '<div id="logs-area"></div>';
     const logsArea = document.getElementById('logs-area');
+    const exportLogsLink = document.getElementById('l-export-logs');
 
     async function load() {
         logsArea.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading…</div>';
         const params = new URLSearchParams({ limit: state.limit, offset: state.offset });
         if (state.level) params.set('level', state.level);
+        exportLogsLink.href = 'api/logs_export.php' + (state.level ? '?level=' + encodeURIComponent(state.level) : '');
         const data = await api('logs.php?' + params.toString());
         renderLogTable(logsArea, data);
     }

@@ -196,14 +196,6 @@ slower - each requires one extra Plex API call per movie):
   wired up (Plex's per-episode file locations vs. per-show artwork make the
   "same folder as the media" assumption more complicated).
 
-## Suggested next steps (not built yet)
-
-- App-level audit log export (CSV) of everything the asset history has recorded
-- A "diff" view on the movie detail page comparing the currently-saved image
-  against the top candidate, side by side
-- Bulk-ignore ("ignore Square Art for this entire library") if square art
-  isn't worth chasing per-title in your setup
-
 ## Contributing
 
 Issues and PRs welcome. The codebase is intentionally small and

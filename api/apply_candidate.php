@@ -35,5 +35,6 @@ if ($status === 'failed') {
 
 log_asset_history($ratingKey, $assetType, $status, $source, $filename, 'Applied from candidate picker');
 resolve_pending_review($ratingKey, $assetType);
+log_line(null, 'info', 'Applied ' . $source . ' candidate for ' . ASSET_LABELS[$assetType] . ' — "' . $movie['title'] . "\" (#{$ratingKey}) — {$status}");
 
 json_out(['status' => $status, 'filename' => $filename]);

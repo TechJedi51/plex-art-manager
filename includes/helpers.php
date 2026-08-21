@@ -308,6 +308,15 @@ function download_url_to_file(string $url, string $destPath, ?string &$errorOut 
     return true;
 }
 
+/** Movie title for narrative log messages; falls back to the Plex ID if the movie isn't cached locally yet. */
+function movie_title(int $ratingKey): string
+{
+    $stmt = get_db()->prepare('SELECT title FROM movies WHERE rating_key = :rk');
+    $stmt->execute(['rk' => $ratingKey]);
+    $title = $stmt->fetchColumn();
+    return $title !== false ? $title : "#{$ratingKey}";
+}
+
 /** Record one asset save attempt in asset_history. */
 function log_asset_history(int $ratingKey, string $assetType, string $status, string $source, ?string $filename = null, ?string $note = null): void
 {
