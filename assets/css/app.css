@@ -317,29 +317,32 @@ table.data-table td.path { color: var(--text-muted); font-size: 12px; font-famil
    background (and against the actual square art they'd be paired with in
    Plex) is the only way to judge whether they'll actually read well. */
 .logo-preview-grid { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 10px; }
-.logo-preview-box { width: 220px; text-align: center; }
+.logo-preview-box { text-align: center; }
 .logo-preview-box .frame {
-    height: 130px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
 }
 .logo-preview-box .frame.light { background: #f0f1f3; }
 .logo-preview-box .frame.dark { background: #1a1a1a; }
-.logo-preview-box .frame img { max-width: 85%; max-height: 85%; object-fit: contain; }
+/* Sized to Thumbnail Max Width (--thumb-w, set from Settings) rather than the
+   server-side resized/cached thumbnail, which always flattens transparency
+   onto white - these load the original file (see &full=1 in app.js) so real
+   alpha transparency is preserved and actually visible against each bg. */
+.logo-preview-box .frame:not(.square-overlay) img { width: var(--thumb-w, 100px); height: auto; display: block; }
 .logo-preview-box .label { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
-.logo-preview-box .frame.square-overlay { position: relative; width: 100%; padding: 0; }
-.logo-preview-box .frame.square-overlay img.square-bg { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+.logo-preview-box .frame.square-overlay { position: relative; padding: 0; }
+.logo-preview-box .frame.square-overlay img.square-bg { width: var(--thumb-w, 100px); height: auto; display: block; }
 .logo-preview-box .frame.square-overlay img.logo-fg {
     position: absolute;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    max-width: 65%;
-    max-height: 65%;
+    width: calc(var(--thumb-w, 100px) * 0.9);
+    height: auto;
     filter: drop-shadow(0 1px 4px rgba(0,0,0,0.7));
 }
 

@@ -762,13 +762,18 @@ async function viewMovieDetail(content, toolbar, ratingKey) {
     const squareChanged = [...data.history].find(h => h.asset_type === 'square' && successStatuses.includes(h.status));
     const logoFile = logoChanged && data.files.includes(logoChanged.filename) ? logoChanged.filename : null;
     const squareFile = squareChanged && data.files.includes(squareChanged.filename) ? squareChanged.filename : null;
-    const logoUrl = logoFile ? `api/image.php?ratingKey=${m.rating_key}&file=${encodeURIComponent(logoFile)}` : null;
-    const squareUrl = squareFile ? `api/image.php?ratingKey=${m.rating_key}&file=${encodeURIComponent(squareFile)}` : null;
+    // &full=1 bypasses api/image.php's thumbnail cache, which always re-encodes
+    // to JPEG and deliberately flattens transparency onto white (fine for the
+    // generic file grid below, but it would defeat the whole point of a
+    // light/dark/over-square-art preview). Sizing is done client-side via
+    // --thumb-w instead of the server-side resize these would otherwise get.
+    const logoUrl = logoFile ? `api/image.php?ratingKey=${m.rating_key}&file=${encodeURIComponent(logoFile)}&full=1` : null;
+    const squareUrl = squareFile ? `api/image.php?ratingKey=${m.rating_key}&file=${encodeURIComponent(squareFile)}&full=1` : null;
 
     const logoPreviewHtml = logoUrl ? `
         <div class="section-block">
             <h3 class="section-title" style="font-size:16px">Logo Preview</h3>
-            <div class="logo-preview-grid">
+            <div class="logo-preview-grid" style="--thumb-w:${thumbW}px">
                 <div class="logo-preview-box">
                     <div class="frame light"><img src="${logoUrl}" alt="Logo on light background"></div>
                     <div class="label">Light Background</div>
