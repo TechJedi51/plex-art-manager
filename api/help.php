@@ -134,25 +134,25 @@ $sections = [
             automatically - there is no default online source. It\'s always either uploaded manually through
             the Plex Web App, or produced by a third-party tool (e.g. Poster Tools\' "Square Lab") that crops an
             existing backdrop into a square and pushes it directly to your Plex server.</p>
-            <p>If a movie already has square art registered on the Plex item - however it got there - this app
-            will find and save it exactly like any other asset type. What it can\'t currently do is suggest a
+            <p>If a movie already has square art registered on the Plex item - however it got there - Plex Art
+            Manager will find and save it exactly like any other asset type. What it can\'t currently do is suggest a
             square-art candidate for a movie that has none, since Fanart.tv and TMDB don\'t offer that category.</p>',
     ],
     [
         'id' => 'diagnostics',
         'title' => 'Diagnostics',
         'body' => '
-            <p><em>Note: "Plex ID" throughout this app refers to what Plex\'s own API calls the "Rating Key" -
+            <p><em>Note: "Plex ID" throughout Plex Art Manager refers to what Plex\'s own API calls the "Rating Key" -
             the same number, just a plainer name. If you\'re ever cross-referencing Plex\'s own documentation,
             API responses, or XML view, "ratingKey" is the field to look for.</em></p>
             <p>Look up one movie by Plex ID (find it via the Movies list URL, <code>#/movies/&lt;ratingKey&gt;</code>,
             or the shortcut button on a movie\'s detail page) and see, side by side: exactly what Plex reports
-            for that item, exactly what this app\'s PHP process can see on disk, and what user that process is
+            for that item, exactly what Plex Art Manager\'s PHP process can see on disk, and what user that process is
             actually running as.</p>
             <p>This is the right first stop any time something looks wrong that shouldn\'t be - a folder
             reported as inaccessible when you know it exists usually points at a permissions or network-mount
             visibility mismatch between the web server\'s user and whatever actually has access to your media,
-            not a bug in this app\'s logic.</p>',
+            not a bug in Plex Art Manager\'s logic.</p>',
     ],
     [
         'id' => 'logs',
@@ -180,7 +180,7 @@ $sections = [
             <p><strong>Default Batch Size</strong> - the value pre-filled into Batch Process\'s Movies to Process field.</p>
             <p><strong>Folder Mapping</strong> - one row per independent mount root, with three fields:
             <strong>Path in Plex</strong> (the folder path exactly as Plex reports it), <strong>Local Path</strong>
-            (what this app\'s own process actually sees on disk for that same folder - only different from Path
+            (what Plex Art Manager\'s own process actually sees on disk for that same folder - only different from Path
             in Plex if, say, Plex runs on a different machine or the two reach the media through different mount
             points), and <strong>Display Path</strong> (a friendly label shown in the UI in place of that
             folder\'s real path - purely cosmetic). If there\'s no real path difference, set Path in Plex and

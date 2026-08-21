@@ -47,11 +47,19 @@ a:hover { text-decoration: underline; }
 /* ---------------------------------------------------------------------- */
 /* Shell layout                                                           */
 /* ---------------------------------------------------------------------- */
-#shell { display: flex; min-height: 100vh; }
+/* Fixed to exactly the viewport height (not just min-height) so #sidebar
+   stays pinned full-height and #main scrolls independently - otherwise, on
+   a page taller than the viewport, #sidebar stretches to match #main's full
+   (scrolled) height and nav-bottom's flex-bottom placement (Logs/Settings/
+   Help) ends up at the bottom of the whole page instead of the visible
+   screen, requiring a scroll to reach it. */
+#shell { display: flex; height: 100vh; overflow: hidden; }
 
 #sidebar {
     width: var(--sidebar-width);
     flex-shrink: 0;
+    height: 100vh;
+    overflow-y: auto;
     background: var(--sidebar-bg);
     color: var(--sidebar-text);
     display: flex;
@@ -97,7 +105,7 @@ a:hover { text-decoration: underline; }
     border-left-color: var(--accent);
 }
 
-#main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#main { flex: 1; min-width: 0; display: flex; flex-direction: column; height: 100vh; overflow-y: auto; }
 
 #toolbar {
     background: var(--sidebar-bg);
@@ -229,8 +237,8 @@ input[type=checkbox] { accent-color: var(--accent); width: 16px; height: 16px; f
 .setting-row .control-wrap textarea { width: 100%; }
 .setting-row .control-wrap input[type=checkbox],
 .setting-row .control-wrap input[type=radio] { width: 16px; height: 16px; }
-.setting-row .help { color: var(--text-muted); font-size: 12px; margin-top: 6px; }
-.setting-row .help.warn { color: var(--warning); }
+.help { color: var(--text-muted); font-size: 12px; margin-top: 6px; }
+.help.warn { color: var(--warning); }
 
 /* ---------------------------------------------------------------------- */
 /* Cards / stat tiles                                                     */
@@ -303,6 +311,37 @@ table.data-table td.path { color: var(--text-muted); font-size: 12px; font-famil
 .thumb-item { text-align: center; width: var(--thumb-w, 100px); }
 .thumb-item img { max-width: var(--thumb-w, 100px); border: 1px solid var(--border); border-radius: var(--radius); display: block; background: #f0f1f3; }
 .thumb-item .fname { font-size: 11px; color: var(--text-muted); margin-top: 4px; word-break: break-all; }
+
+/* Logo preview: light bg, dark bg, and centered over Square Art - logos are
+   often transparent PNGs, so seeing them against both a light and dark
+   background (and against the actual square art they'd be paired with in
+   Plex) is the only way to judge whether they'll actually read well. */
+.logo-preview-grid { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 10px; }
+.logo-preview-box { width: 220px; text-align: center; }
+.logo-preview-box .frame {
+    height: 130px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.logo-preview-box .frame.light { background: #f0f1f3; }
+.logo-preview-box .frame.dark { background: #1a1a1a; }
+.logo-preview-box .frame img { max-width: 85%; max-height: 85%; object-fit: contain; }
+.logo-preview-box .label { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+.logo-preview-box .frame.square-overlay { position: relative; width: 100%; padding: 0; }
+.logo-preview-box .frame.square-overlay img.square-bg { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+.logo-preview-box .frame.square-overlay img.logo-fg {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 65%;
+    max-height: 65%;
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,0.7));
+}
 
 .candidate-grid { display: flex; flex-wrap: wrap; gap: 14px; }
 .candidate-item { width: 160px; border: 1px solid var(--border); border-radius: var(--radius); padding: 8px; text-align: center; cursor: pointer; background: #fff; }

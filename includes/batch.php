@@ -110,7 +110,7 @@ function process_one_asset(PlexClient $plex, int $ratingKey, string $title, ?str
 
     if ($dryRun) {
         if (!is_dir($folder)) {
-            return ['status' => 'would_fail', 'error' => "Folder not accessible from this app: {$folder}"];
+            return ['status' => 'would_fail', 'error' => "Folder not accessible from Plex Art Manager: {$folder}"];
         }
         if (!$url) {
             return ['status' => 'would_fail', 'error' => 'No ' . $assetType . ' available from Plex'];

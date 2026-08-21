@@ -11,7 +11,7 @@ function now_iso(): string
  * setting - a JSON array of {plexPath, localPath, displayPath} rows, set on
  * the Settings page under "Folder Mapping". One row can serve one or both
  * purposes: plexPath -> localPath rewrites a path the way Plex reports it
- * into the path this app's own process actually sees on disk (only needed
+ * into the path Plex Art Manager's own process actually sees on disk (only needed
  * when they differ, e.g. Plex reached through a different Docker bind mount
  * or network share mount point); localPath -> displayPath is purely cosmetic,
  * swapping the on-disk prefix for a friendlier label in the UI. A setup with
@@ -209,11 +209,11 @@ function save_with_backup(string $sourceUrl, string $dir, string $filename, ?str
         // disconnected local folder instead of surfacing the real problem —
         // and then quietly "succeed" while writing to the wrong place
         // entirely. Use the Diagnostics page to confirm folder access.
-        $errorOut = "Folder does not exist or is not visible to this app: {$dir}";
+        $errorOut = "Folder does not exist or is not visible to Plex Art Manager: {$dir}";
         return 'failed';
     }
     if (!is_writable($dir)) {
-        $errorOut = "Folder exists but is not writable by this app's process: {$dir}";
+        $errorOut = "Folder exists but is not writable by Plex Art Manager's process: {$dir}";
         return 'failed';
     }
 

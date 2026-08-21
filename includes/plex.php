@@ -127,7 +127,7 @@ class PlexClient
     /**
      * Pull the local filesystem folder for an item out of its Media/Part locations.
      * For shows/seasons without their own file, callers should instead resolve
-     * via the first episode — this app focuses on movie libraries, which always
+     * via the first episode — Plex Art Manager focuses on movie libraries, which always
      * have Media/Part on the item itself.
      */
     public function itemFolderPath(array $item): ?string

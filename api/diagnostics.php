@@ -32,6 +32,7 @@ $plexInfo = [
     'ratingKey'      => $ratingKey,
     'rawFilePath'    => $rawFile,
     'resolvedFolder' => $mappedFolder,
+    'displayPath'    => display_path($mappedFolder),
     'tmdbId'         => $plex->itemTmdbId($item),
     'imdbId'         => $plex->itemImdbId($item),
     'imageUrls'      => [],
@@ -40,8 +41,12 @@ foreach (array_keys(ASSET_FILENAMES) as $type) {
     $plexInfo['imageUrls'][$type] = $plex->itemAssetUrl($item, $type);
 }
 
+// Kept separate from $notes (rather than mixed in) so the frontend can show
+// it right next to Resolved Folder, where it's actually relevant, instead of
+// lumped in with the general folder-access notes at the top of the page.
+$mappingNote = null;
 if ($rawFile && $mappedFolder !== dirname($rawFile)) {
-    $notes[] = 'A Folder Mapping row (Settings page) is rewriting this path (raw Plex path differs from the resolved folder above). Confirm that mapping is still correct.';
+    $mappingNote = 'A Folder Mapping row (Settings page) is rewriting this path (raw Plex path differs from the resolved folder above). Confirm that mapping is still correct.';
 }
 
 // --- Filesystem side ---
@@ -94,8 +99,8 @@ if ($mappedFolder === null) {
 } elseif (!$fs['folderExists']) {
     $notes[] = "Plex Art Manager cannot see \"{$mappedFolder}\" on disk, even though Plex reports the movie living there. "
         . 'On macOS this is commonly a mount-visibility issue: network/user-mounted volumes under /Volumes are often only '
-        . 'visible to the logged-in GUI user session that mounted them, not to a background daemon like this is running as '
-        . "a different user (shown below as \"processUser\"). If the folder genuinely doesn't exist, this app will never be "
+        . 'visible to the logged-in GUI user session that mounted them, not to a background daemon like php-fpm running as '
+        . "a different user (shown below as \"processUser\"). If the folder genuinely doesn't exist, Plex Art Manager will never be "
         . 'able to save artwork for this movie.';
 } elseif (!$fs['folderWritable']) {
     $notes[] = "Plex Art Manager can see \"{$mappedFolder}\" but cannot write to it — check folder ownership/permissions for the processUser shown below.";
@@ -113,4 +118,5 @@ json_out([
     'filesystem'  => $fs,
     'processUser' => $processUser,
     'notes'       => $notes,
+    'mappingNote' => $mappingNote,
 ]);

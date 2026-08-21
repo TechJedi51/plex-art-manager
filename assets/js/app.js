@@ -751,8 +751,42 @@ async function viewMovieDetail(content, toolbar, ratingKey) {
 
     toolbar.innerHTML = `
         <a class="btn" href="#/movies">← Back to Movies</a>
-        <a class="btn" href="#/diagnostics" id="detail-diag-link">Run Diagnostics on This Movie</a>
     `;
+
+    // Logo/Square previews: pull the exact saved filename from history (same
+    // source as the "Last changed via" line below) rather than assuming the
+    // standard logo.png/square.jpg names, and confirm it's still actually on
+    // disk before trying to render it.
+    const successStatuses = ['new', 'updated', 'unchanged', 'kept_existing'];
+    const logoChanged = [...data.history].find(h => h.asset_type === 'logo' && successStatuses.includes(h.status));
+    const squareChanged = [...data.history].find(h => h.asset_type === 'square' && successStatuses.includes(h.status));
+    const logoFile = logoChanged && data.files.includes(logoChanged.filename) ? logoChanged.filename : null;
+    const squareFile = squareChanged && data.files.includes(squareChanged.filename) ? squareChanged.filename : null;
+    const logoUrl = logoFile ? `api/image.php?ratingKey=${m.rating_key}&file=${encodeURIComponent(logoFile)}` : null;
+    const squareUrl = squareFile ? `api/image.php?ratingKey=${m.rating_key}&file=${encodeURIComponent(squareFile)}` : null;
+
+    const logoPreviewHtml = logoUrl ? `
+        <div class="section-block">
+            <h3 class="section-title" style="font-size:16px">Logo Preview</h3>
+            <div class="logo-preview-grid">
+                <div class="logo-preview-box">
+                    <div class="frame light"><img src="${logoUrl}" alt="Logo on light background"></div>
+                    <div class="label">Light Background</div>
+                </div>
+                <div class="logo-preview-box">
+                    <div class="frame dark"><img src="${logoUrl}" alt="Logo on dark background"></div>
+                    <div class="label">Dark Background</div>
+                </div>
+                ${squareUrl ? `
+                <div class="logo-preview-box">
+                    <div class="frame square-overlay">
+                        <img class="square-bg" src="${squareUrl}" alt="Square Art">
+                        <img class="logo-fg" src="${logoUrl}" alt="Logo over Square Art">
+                    </div>
+                    <div class="label">Over Square Art</div>
+                </div>` : ''}
+            </div>
+        </div>` : '';
 
     const filesHtml = data.files.length
         ? `<div class="thumb-grid" style="--thumb-w:${thumbW}px">` + data.files.map(f => `
@@ -801,6 +835,10 @@ async function viewMovieDetail(content, toolbar, ratingKey) {
             </div>
             ${assetRows}
         </div>
+        <div class="pill-row">
+            <a class="btn btn-primary" href="#/diagnostics" id="detail-diag-link">Run Diagnostics on This Movie</a>
+        </div>
+        ${logoPreviewHtml}
         <div class="section-block">
             <h3 class="section-title" style="font-size:16px">Files in Folder</h3>
             ${filesHtml}
@@ -1056,7 +1094,7 @@ async function viewDiagnostics(content, toolbar) {
                 <input type="number" id="d-ratingkey" placeholder="Plex ID, e.g. 72749" style="width:220px">
                 <button class="btn btn-primary" id="d-run">Run Test Query</button>
             </div>
-            <div class="help">Find a Plex ID from the Movies list (click a movie — it's in the URL as #/movies/&lt;ratingKey&gt;) or from Plex's own "Get Info" / XML view.</div>
+            <div class="help" style="margin-top:14px">Find a Plex ID from the Movies list (click a movie — it's in the URL as #/movies/&lt;ratingKey&gt;) or from Plex's own "Get Info" / XML view.</div>
         </div>
         <div id="d-results"></div>
     `;
@@ -1108,13 +1146,15 @@ async function runDiagnostics() {
                     <tr><td style="width:200px"><strong>Title</strong></td><td>${esc(data.plex.title)}</td></tr>
                     <tr><td><strong>Raw file path</strong></td><td class="path">${esc(data.plex.rawFilePath || '—')}</td></tr>
                     <tr><td><strong>Resolved folder</strong></td><td class="path">${esc(data.plex.resolvedFolder || '—')}</td></tr>
+                    <tr><td><strong>Displayed Path</strong></td><td class="path">${esc(data.plex.displayPath || '—')}</td></tr>
                     <tr><td><strong>TMDB ID</strong></td><td>${esc(data.plex.tmdbId ?? '—')}</td></tr>
                     <tr><td><strong>IMDB ID</strong></td><td>${esc(data.plex.imdbId ?? '—')}</td></tr>
                 </tbody>
             </table>
+            ${data.mappingNote ? `<div class="banner banner-warn" style="margin-top:14px">${esc(data.mappingNote)}</div>` : ''}
         </div>
         <div class="card section-block">
-            <h3 style="margin-top:0">This app's process sees</h3>
+            <h3 style="margin-top:0">Plex Art Manager's process sees</h3>
             <table class="data-table">
                 <tbody>
                     <tr><td style="width:200px"><strong>Folder exists</strong></td><td>${data.filesystem.folderExists ? '✓ yes' : '✗ no'}</td></tr>
@@ -1331,7 +1371,7 @@ async function viewSettings(content, toolbar) {
         <div class="card section-block">
             <h3 style="margin-top:0">Folder Mapping</h3>
             <p style="color:var(--text-muted); font-size:13px; margin-top:0;">
-                Only needed if this app sees a different filesystem path than Plex reports (e.g. Plex running in
+                Only needed if Plex Art Manager sees a different filesystem path than Plex reports (e.g. Plex running in
                 Docker, or reached through a different mount point) or you'd like a friendlier label than the real
                 path in the UI. <strong>Path in Plex</strong> and <strong>Local Path</strong> can be identical if
                 there's no actual path difference - <strong>Display Path</strong> alone still works to relabel that
