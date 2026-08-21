@@ -24,7 +24,7 @@ define('DB_PATH', DATA_DIR . '/app.sqlite');
 
 // Bump this on meaningful changes - shown in the sidebar so it's obvious at a
 // glance whether a given browser/deploy is actually running the latest code.
-define('APP_VERSION', '1.11.1');
+define('APP_VERSION', '1.11.2');
 
 // data/ and cache/ must be writable by the php-fpm user (e.g. `chown -R www-data:www-data data cache`
 // or on macOS, the user php-fpm runs as — see README.md).
@@ -56,4 +56,31 @@ function json_out($data, int $status = 200): never
 function json_error(string $message, int $status = 400): never
 {
     json_out(['error' => $message], $status);
+}
+
+// Uncaught exceptions in an api/*.php endpoint would otherwise produce a raw,
+// non-JSON PHP error page (display_errors is off, see above) - the frontend's
+// api() helper can't parse that, so it falls back to a generic "Request
+// failed (500)" with zero detail (e.g. apply_candidate.php, which has no
+// try/catch of its own). This catches anything that slips past an endpoint's
+// own error handling, turns it into a real JSON error response, and logs it
+// both to docker logs (error_log, as above) and to the Logs page (log_line())
+// so a failure like this is never a total mystery. CLI-only (job_worker.php,
+// process_batch_cli.php) skip this - there's no HTTP response to send there,
+// and job_worker.php already has its own comprehensive per-job error handling.
+if (PHP_SAPI !== 'cli') {
+    set_exception_handler(function (Throwable $e) {
+        error_log('Uncaught exception: ' . $e);
+        try {
+            log_line(null, 'error', 'Uncaught exception: ' . $e->getMessage());
+        } catch (Throwable $loggingFailed) {
+            // Don't let a failure to log mask the real error below.
+        }
+        if (!headers_sent()) {
+            http_response_code(500);
+            header('Content-Type: application/json; charset=utf-8');
+        }
+        echo json_encode(['error' => $e->getMessage()], JSON_UNESCAPED_SLASHES);
+        exit;
+    });
 }
