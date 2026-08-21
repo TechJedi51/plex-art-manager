@@ -5,6 +5,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     json_error('Method not allowed', 405);
 }
 
+flush_log_queue();
+
 $where = '';
 $params = [];
 if (!empty($_GET['level'])) {

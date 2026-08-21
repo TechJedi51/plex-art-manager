@@ -24,7 +24,7 @@ define('DB_PATH', DATA_DIR . '/app.sqlite');
 
 // Bump this on meaningful changes - shown in the sidebar so it's obvious at a
 // glance whether a given browser/deploy is actually running the latest code.
-define('APP_VERSION', '1.12.0');
+define('APP_VERSION', '1.13.0');
 
 // data/ and cache/ must be writable by the php-fpm user (e.g. `chown -R www-data:www-data data cache`
 // or on macOS, the user php-fpm runs as — see README.md).
@@ -55,6 +55,14 @@ function json_out($data, int $status = 200): never
 
 function json_error(string $message, int $status = 400): never
 {
+    // 5xx here means a caught Throwable from a real failure (Plex unreachable, a
+    // download or save that failed, a locked database, etc.) got turned into a
+    // clean JSON response instead of propagating to the uncaught-exception
+    // handler below - log it here too so it isn't lost. Ordinary 4xx validation
+    // errors (missing/bad params) are expected and left out to avoid noise.
+    if ($status >= 500) {
+        log_line(null, 'error', $message);
+    }
     json_out(['error' => $message], $status);
 }
 

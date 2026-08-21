@@ -158,20 +158,30 @@ $sections = [
         'id' => 'logs',
         'title' => 'Logs',
         'body' => '
-            <p>A searchable history of app activity - Sync/Batch job starts, finishes, cancellations, and
-            failures; every manual Ignore/Un-ignore, upload override, and candidate image applied from Needs
-            Review or a movie\'s detail page; plus any real application errors. Filter by level (Debug / Info /
-            Warn / Error) and page through with Prev/Next; each entry shows which job it belongs to, if any.</p>
-            <p><strong>Debug Mode</strong> (Settings page, off by default) adds a lot more detail here - a line
-            for every chunk a Sync or Batch job processes, not just the start/finish summary. Leave it off for
-            normal use; turn it on temporarily if you need to see exactly what a job did step by step. Info,
-            Warn, and Error entries are always recorded regardless of this setting, so a job\'s outcome is never
-            lost even with Debug Mode off.</p>
-            <p><strong>Export Logs (CSV)</strong> downloads this narrative activity log, honoring the current
-            level filter. <strong>Export Asset History (CSV)</strong> downloads the full per-movie, per-asset
-            save/skip/failure record from every Sync, Batch, upload, and candidate apply ever run - the same
-            data shown (capped to the most recent 100) on each movie\'s detail page - as a complete,
-            unfiltered audit trail.</p>',
+            <p>Three tabs, each filterable, paginated, and independently exportable as CSV (the button always
+            downloads whatever the current filters show):</p>
+            <p><strong>Activity Log</strong> - Sync/Batch job starts, finishes, cancellations, and failures;
+            every manual Ignore/Un-ignore, upload override, and candidate image applied from Needs Review or a
+            movie\'s detail page; plus any real application error (Plex unreachable, a failed download/save, a
+            locked database, etc.) - anything that reaches a 5xx response gets logged here automatically, not
+            just uncaught crashes. Filter by level (Debug / Info / Warn / Error); each entry shows which job it
+            belongs to, if any.</p>
+            <p><strong>Debug Mode</strong> (Settings page, off by default) adds a lot more detail to the
+            Activity Log - a line for every chunk a Sync or Batch job processes, not just the start/finish
+            summary. Leave it off for normal use; turn it on temporarily if you need to see exactly what a job
+            did step by step. Info, Warn, and Error entries are always recorded regardless of this setting, so
+            a job\'s outcome is never lost even with Debug Mode off.</p>
+            <p>If the database is briefly locked (e.g. a manual action racing a background job\'s writes) right
+            when an activity-log line would be written, it\'s queued to disk instead of dropped, and appears
+            automatically as soon as the database frees up - a banner on the Activity Log tab says so while
+            anything is still queued.</p>
+            <p><strong>Asset History</strong> - the full per-movie, per-asset save/skip/failure record from
+            every Sync, Batch, manual upload, and candidate apply ever run - the same data shown (capped to the
+            most recent 100) on each movie\'s detail page, but complete and searchable here. Filter by movie
+            title, asset type, status, and source (Plex / Fanart.tv / TMDB / Manual).</p>
+            <p><strong>Job History</strong> - every Sync/Batch run ever started, not just whichever one is
+            currently active elsewhere in the app - status, library, asset types, dry-run flag, result counts,
+            timing, and the error if it failed. Filter by type (Sync/Batch) and status.</p>',
     ],
     [
         'id' => 'cron',

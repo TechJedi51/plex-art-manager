@@ -1189,39 +1189,155 @@ async function runDiagnostics() {
    Log View
    ========================================================================== */
 
-async function viewLogs(content, toolbar) {
-    const state = { level: '', offset: 0, limit: 50 };
+const JOB_STATUS_LABELS = { queued: 'Queued', running: 'Running', done: 'Done', failed: 'Failed', cancelled: 'Cancelled' };
+const SOURCE_LABELS = { plex: 'Plex', fanart: 'Fanart.tv', tmdb: 'TMDB', manual: 'Manual' };
 
-    toolbar.innerHTML = `
-        <span class="toolbar-title"><span class="icon-mask icon-mask-logs"></span>Logs</span>
-        <select id="l-level">
-            <option value="">All levels</option>
-            <option value="debug">Debug</option>
-            <option value="info">Info</option>
-            <option value="warn">Warn</option>
-            <option value="error">Error</option>
-        </select>
-        <button class="btn" id="l-refresh">Refresh</button>
-        <a class="btn" id="l-export-logs" href="api/logs_export.php">Export Logs (CSV)</a>
-        <a class="btn" id="l-export-history" href="api/history_export.php">Export Asset History (CSV)</a>
-    `;
+/**
+ * Three panels sharing one page: Activity Log (the `logs` table - job
+ * starts/finishes, manual Ignore/upload/candidate actions, real errors),
+ * Asset History (every save/skip/failure `asset_history` has ever recorded,
+ * across Sync/Batch/manual actions), and Job History (every Sync/Batch run
+ * ever started, not just the currently active one). Each has its own
+ * filters, pagination, and CSV export honoring the current filters.
+ */
+async function viewLogs(content, toolbar) {
+    const state = {
+        tab: 'activity', // 'activity' | 'history' | 'jobs'
+        activity: { level: '', offset: 0, limit: 50 },
+        history: { q: '', assetType: '', status: '', source: '', offset: 0, limit: 50 },
+        jobs: { type: '', status: '', offset: 0, limit: 50 },
+    };
+
+    const TABS = { activity: 'Activity Log', history: 'Asset History', jobs: 'Job History' };
+
+    function renderToolbar() {
+        let filtersHtml = '';
+        if (state.tab === 'activity') {
+            const s = state.activity;
+            filtersHtml = `
+                <select id="l-level">
+                    <option value="">All levels</option>
+                    ${['debug', 'info', 'warn', 'error'].map(lv => `<option value="${lv}" ${s.level === lv ? 'selected' : ''}>${lv[0].toUpperCase() + lv.slice(1)}</option>`).join('')}
+                </select>`;
+        } else if (state.tab === 'history') {
+            const s = state.history;
+            filtersHtml = `
+                <input type="search" id="l-h-q" placeholder="Search movies…" style="width:200px" value="${esc(s.q)}">
+                <select id="l-h-type">
+                    <option value="">All asset types</option>
+                    ${ASSET_TYPES.map(t => `<option value="${t}" ${s.assetType === t ? 'selected' : ''}>${ASSET_LABELS[t]}</option>`).join('')}
+                </select>
+                <select id="l-h-status">
+                    <option value="">All statuses</option>
+                    ${['new', 'updated', 'unchanged', 'kept_existing', 'failed'].map(st => `<option value="${st}" ${s.status === st ? 'selected' : ''}>${STATUS_LABELS[st] || st}</option>`).join('')}
+                </select>
+                <select id="l-h-source">
+                    <option value="">All sources</option>
+                    ${Object.keys(SOURCE_LABELS).map(src => `<option value="${src}" ${s.source === src ? 'selected' : ''}>${SOURCE_LABELS[src]}</option>`).join('')}
+                </select>`;
+        } else {
+            const s = state.jobs;
+            filtersHtml = `
+                <select id="l-j-type">
+                    <option value="">All types</option>
+                    <option value="sync" ${s.type === 'sync' ? 'selected' : ''}>Sync</option>
+                    <option value="batch" ${s.type === 'batch' ? 'selected' : ''}>Batch</option>
+                </select>
+                <select id="l-j-status">
+                    <option value="">All statuses</option>
+                    ${Object.keys(JOB_STATUS_LABELS).map(st => `<option value="${st}" ${s.status === st ? 'selected' : ''}>${JOB_STATUS_LABELS[st]}</option>`).join('')}
+                </select>`;
+        }
+
+        toolbar.innerHTML = `
+            <span class="toolbar-title"><span class="icon-mask icon-mask-logs"></span>Logs</span>
+            ${Object.entries(TABS).map(([key, label]) => `<button class="btn" id="l-tab-${key}" style="opacity:${state.tab === key ? '1' : '0.6'}">${label}</button>`).join('')}
+            ${filtersHtml}
+            <button class="btn" id="l-refresh">Refresh</button>
+            <a class="btn" id="l-export">Export CSV</a>
+        `;
+
+        Object.keys(TABS).forEach(key => {
+            document.getElementById('l-tab-' + key).addEventListener('click', () => {
+                if (state.tab === key) return;
+                state.tab = key;
+                renderToolbar();
+                load();
+            });
+        });
+        document.getElementById('l-refresh').addEventListener('click', () => load());
+
+        if (state.tab === 'activity') {
+            document.getElementById('l-level').addEventListener('change', e => { state.activity.level = e.target.value; state.activity.offset = 0; load(); });
+        } else if (state.tab === 'history') {
+            document.getElementById('l-h-q').addEventListener('input', debounce(e => { state.history.q = e.target.value; state.history.offset = 0; load(); }, 300));
+            document.getElementById('l-h-type').addEventListener('change', e => { state.history.assetType = e.target.value; state.history.offset = 0; load(); });
+            document.getElementById('l-h-status').addEventListener('change', e => { state.history.status = e.target.value; state.history.offset = 0; load(); });
+            document.getElementById('l-h-source').addEventListener('change', e => { state.history.source = e.target.value; state.history.offset = 0; load(); });
+        } else {
+            document.getElementById('l-j-type').addEventListener('change', e => { state.jobs.type = e.target.value; state.jobs.offset = 0; load(); });
+            document.getElementById('l-j-status').addEventListener('change', e => { state.jobs.status = e.target.value; state.jobs.offset = 0; load(); });
+        }
+    }
 
     content.innerHTML = '<div id="logs-area"></div>';
     const logsArea = document.getElementById('logs-area');
-    const exportLogsLink = document.getElementById('l-export-logs');
+
+    function updateExportLink() {
+        const link = document.getElementById('l-export');
+        if (!link) return;
+        if (state.tab === 'activity') {
+            const s = state.activity;
+            link.href = 'api/logs_export.php' + (s.level ? '?level=' + encodeURIComponent(s.level) : '');
+        } else if (state.tab === 'history') {
+            const s = state.history;
+            const p = new URLSearchParams();
+            if (s.q) p.set('q', s.q);
+            if (s.assetType) p.set('assetType', s.assetType);
+            if (s.status) p.set('status', s.status);
+            if (s.source) p.set('source', s.source);
+            link.href = 'api/history_export.php' + (p.toString() ? '?' + p.toString() : '');
+        } else {
+            const s = state.jobs;
+            const p = new URLSearchParams();
+            if (s.type) p.set('type', s.type);
+            if (s.status) p.set('status', s.status);
+            link.href = 'api/jobs_export.php' + (p.toString() ? '?' + p.toString() : '');
+        }
+    }
+
+    function renderPagination(data) {
+        const totalPages = Math.ceil(data.total / data.limit);
+        const curPage = Math.floor(data.offset / data.limit) + 1;
+        if (totalPages <= 1) return '';
+        return `
+            <div class="pagination">
+                <button class="btn" ${data.offset === 0 ? 'disabled' : ''} data-page="${Math.max(0, data.offset - data.limit)}">← Prev</button>
+                <span>Page ${curPage} of ${totalPages}</span>
+                <button class="btn" ${curPage >= totalPages ? 'disabled' : ''} data-page="${data.offset + data.limit}">Next →</button>
+            </div>`;
+    }
 
     async function load() {
         logsArea.innerHTML = '<div class="empty-state"><span class="spinner"></span> Loading…</div>';
-        const params = new URLSearchParams({ limit: state.limit, offset: state.offset });
-        if (state.level) params.set('level', state.level);
-        exportLogsLink.href = 'api/logs_export.php' + (state.level ? '?level=' + encodeURIComponent(state.level) : '');
-        const data = await api('logs.php?' + params.toString());
-        renderLogTable(logsArea, data);
+        updateExportLink();
+        if (state.tab === 'activity') await loadActivity();
+        else if (state.tab === 'history') await loadHistory();
+        else await loadJobs();
     }
 
-    function renderLogTable(box, data) {
+    async function loadActivity() {
+        const s = state.activity;
+        const params = new URLSearchParams({ limit: s.limit, offset: s.offset });
+        if (s.level) params.set('level', s.level);
+        const data = await api('logs.php?' + params.toString());
+
+        const queuedBanner = data.queuedPending
+            ? `<div class="banner banner-warn">⏳ Some log entries couldn't be written yet (the database was briefly locked) and are queued to appear as soon as it's free.</div>`
+            : '';
+
         if (!data.logs.length) {
-            box.innerHTML = `<div class="empty-state">No log entries${state.level ? ' at this level' : ''} yet. ${state.level === '' ? 'Debug-level entries only appear once Debug Mode is turned on in Settings.' : ''}</div>`;
+            logsArea.innerHTML = `${queuedBanner}<div class="empty-state">No log entries${s.level ? ' at this level' : ''} yet. ${s.level === '' ? 'Debug-level entries only appear once Debug Mode is turned on in Settings.' : ''}</div>`;
             return;
         }
         const rows = data.logs.map(l => `
@@ -1232,34 +1348,94 @@ async function viewLogs(content, toolbar) {
                 <td>${esc(l.message)}</td>
             </tr>`).join('');
 
-        const totalPages = Math.ceil(data.total / data.limit);
-        const curPage = Math.floor(data.offset / data.limit) + 1;
-        const pagination = totalPages > 1 ? `
-            <div class="pagination">
-                <button class="btn" ${data.offset === 0 ? 'disabled' : ''} data-page="${Math.max(0, data.offset - data.limit)}">← Prev</button>
-                <span>Page ${curPage} of ${totalPages}</span>
-                <button class="btn" ${curPage >= totalPages ? 'disabled' : ''} data-page="${data.offset + data.limit}">Next →</button>
-            </div>` : '';
-
-        box.innerHTML = `
+        logsArea.innerHTML = `
+            ${queuedBanner}
             <table class="data-table">
                 <thead><tr><th>Time</th><th>Level</th><th>Job</th><th>Message</th></tr></thead>
                 <tbody>${rows}</tbody>
             </table>
-            ${pagination}
+            ${renderPagination(data)}
         `;
     }
 
-    document.getElementById('l-level').addEventListener('change', e => { state.level = e.target.value; state.offset = 0; load(); });
-    document.getElementById('l-refresh').addEventListener('click', () => load());
+    async function loadHistory() {
+        const s = state.history;
+        const params = new URLSearchParams({ limit: s.limit, offset: s.offset });
+        if (s.q) params.set('q', s.q);
+        if (s.assetType) params.set('assetType', s.assetType);
+        if (s.status) params.set('status', s.status);
+        if (s.source) params.set('source', s.source);
+        const data = await api('asset_history.php?' + params.toString());
+
+        if (!data.items.length) {
+            logsArea.innerHTML = `<div class="empty-state">No asset history recorded yet.</div>`;
+            return;
+        }
+        const rows = data.items.map(h => `
+            <tr>
+                <td style="white-space:nowrap">${fmtDate(h.changed_at)}</td>
+                <td>${h.rating_key ? `<a href="#/movies/${h.rating_key}">${esc(h.title || ('#' + h.rating_key))}</a>${h.year ? ` (${h.year})` : ''}` : esc(h.title || '—')}</td>
+                <td>${ASSET_LABELS[h.asset_type] || esc(h.asset_type)}</td>
+                <td>${statusBadge(h.status)}</td>
+                <td>${SOURCE_LABELS[h.source] || esc(h.source)}</td>
+                <td>${esc(h.filename || '')}</td>
+                <td>${esc(h.note || '')}</td>
+            </tr>`).join('');
+
+        logsArea.innerHTML = `
+            <table class="data-table">
+                <thead><tr><th>Time</th><th>Movie</th><th>Asset</th><th>Status</th><th>Source</th><th>Filename</th><th>Note</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            ${renderPagination(data)}
+        `;
+    }
+
+    async function loadJobs() {
+        const s = state.jobs;
+        const params = new URLSearchParams({ limit: s.limit, offset: s.offset });
+        if (s.type) params.set('type', s.type);
+        if (s.status) params.set('status', s.status);
+        const data = await api('jobs_history.php?' + params.toString());
+
+        if (!data.jobs.length) {
+            logsArea.innerHTML = `<div class="empty-state">No jobs have run yet.</div>`;
+            return;
+        }
+        const rows = data.jobs.map(j => {
+            const counts = Object.entries(j.counts || {}).map(([k, v]) => `${k}: ${v}`).join(', ');
+            return `
+            <tr>
+                <td>#${j.id}</td>
+                <td>${j.type === 'sync' ? 'Sync' : 'Batch'}</td>
+                <td>${jobStatusBadge(j.status)}</td>
+                <td>${esc(j.sectionTitle || '')}</td>
+                <td>${(j.assetTypes || []).map(t => ASSET_LABELS[t] || t).join(', ')}${j.dryRun ? ' (Dry Run)' : ''}</td>
+                <td>${esc(counts)}</td>
+                <td style="white-space:nowrap">${fmtDate(j.startedAt)}</td>
+                <td style="white-space:nowrap">${fmtDate(j.finishedAt)}</td>
+                <td>${esc(j.error || '')}</td>
+            </tr>`;
+        }).join('');
+
+        logsArea.innerHTML = `
+            <table class="data-table">
+                <thead><tr><th>ID</th><th>Type</th><th>Status</th><th>Library</th><th>Assets</th><th>Results</th><th>Started</th><th>Finished</th><th>Error</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>
+            ${renderPagination(data)}
+        `;
+    }
+
     logsArea.addEventListener('click', function delegated(e) {
         const pageBtn = e.target.closest('[data-page]');
         if (pageBtn) {
-            state.offset = parseInt(pageBtn.dataset.page, 10);
+            state[state.tab].offset = parseInt(pageBtn.dataset.page, 10);
             load();
         }
     });
 
+    renderToolbar();
     await load();
 }
 

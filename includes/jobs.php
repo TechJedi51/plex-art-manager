@@ -62,6 +62,43 @@ function get_active_job(): ?array
     return $row ?: null;
 }
 
+/**
+ * Paginated/filterable job history for the Logs page's Job History panel -
+ * every Sync/Batch run ever started, not just the currently active one.
+ * @param array{type?:string,status?:string} $filters
+ */
+function get_jobs_history(array $filters, int $limit, int $offset): array
+{
+    $where = [];
+    $params = [];
+    if (!empty($filters['type'])) {
+        $where[] = 'type = :type';
+        $params['type'] = $filters['type'];
+    }
+    if (!empty($filters['status'])) {
+        $where[] = 'status = :status';
+        $params['status'] = $filters['status'];
+    }
+    $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+
+    $db = get_db();
+
+    $countStmt = $db->prepare("SELECT COUNT(*) FROM jobs {$whereSql}");
+    $countStmt->execute($params);
+    $total = (int) $countStmt->fetchColumn();
+
+    $stmt = $db->prepare("SELECT * FROM jobs {$whereSql} ORDER BY id DESC LIMIT :limit OFFSET :offset");
+    foreach ($params as $k => $v) {
+        $stmt->bindValue(':' . $k, $v);
+    }
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+    $rows = array_map('job_to_api', $stmt->fetchAll());
+
+    return ['jobs' => $rows, 'total' => $total, 'limit' => $limit, 'offset' => $offset];
+}
+
 function get_job(int $id): ?array
 {
     $stmt = get_db()->prepare('SELECT * FROM jobs WHERE id = :id');

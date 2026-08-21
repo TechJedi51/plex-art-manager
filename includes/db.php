@@ -19,10 +19,13 @@ function get_db(): PDO
     $pdo->exec('PRAGMA journal_mode = WAL');
     $pdo->exec('PRAGMA foreign_keys = ON');
     // The job worker (cli/job_worker.php) writes progress every chunk while
-    // web requests may also write (cancel, settings, starting a new job) -
-    // without a busy timeout, SQLite's default is to fail a write immediately
-    // ("database is locked") instead of waiting out a brief writer conflict.
-    $pdo->exec('PRAGMA busy_timeout = 5000');
+    // web requests may also write (cancel, settings, starting a new job,
+    // applying a candidate/upload/ignore from the UI) - without a busy
+    // timeout, SQLite's default is to fail a write immediately ("database is
+    // locked") instead of waiting out a brief writer conflict. 15s (rather
+    // than SQLite's zero default, or a shorter timeout) gives a background
+    // job's in-flight write room to finish first in the common case.
+    $pdo->exec('PRAGMA busy_timeout = 15000');
 
     migrate_db($pdo);
 
